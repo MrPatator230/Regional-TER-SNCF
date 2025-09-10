@@ -1,0 +1,383 @@
+{
+  "generatedAt": "2025-09-09T21:30:30.160Z",
+  "logos": [
+    {
+      "file": "logo-aleop.svg",
+      "path": "/img/type/logo-aleop.svg",
+      "slug": "aleop",
+      "name": "Aleop"
+    },
+    {
+      "file": "logo-auvergerhonealpes.svg",
+      "path": "/img/type/logo-auvergerhonealpes.svg",
+      "slug": "auvergerhonealpes",
+      "name": "Auvergerhonealpes"
+    },
+    {
+      "file": "logo-breizhgo.svg",
+      "path": "/img/type/logo-breizhgo.svg",
+      "slug": "breizhgo",
+      "name": "Breizhgo"
+    },
+    {
+      "file": "logo-cfl.svg",
+      "path": "/img/type/logo-cfl.svg",
+      "slug": "cfl",
+      "name": "CFL"
+    },
+    {
+      "file": "logo-db.svg",
+      "path": "/img/type/logo-db.svg",
+      "slug": "db",
+      "name": "DB"
+    },
+    {
+      "file": "logo-eurostar.svg",
+      "path": "/img/type/logo-eurostar.svg",
+      "slug": "eurostar",
+      "name": "Eurostar"
+    },
+    {
+      "file": "logo-fluo.svg",
+      "path": "/img/type/logo-fluo.svg",
+      "slug": "fluo",
+      "name": "Fluo"
+    },
+    {
+      "file": "logo-frecciarossa.svg",
+      "path": "/img/type/logo-frecciarossa.svg",
+      "slug": "frecciarossa",
+      "name": "Frecciarossa"
+    },
+    {
+      "file": "logo-hautsdefrance.svg",
+      "path": "/img/type/logo-hautsdefrance.svg",
+      "slug": "hautsdefrance",
+      "name": "Hautsdefrance"
+    },
+    {
+      "file": "logo-ice.svg",
+      "path": "/img/type/logo-ice.svg",
+      "slug": "ice",
+      "name": "ICE"
+    },
+    {
+      "file": "logo-intercites.svg",
+      "path": "/img/type/logo-intercites.svg",
+      "slug": "intercites",
+      "name": "Intercités"
+    },
+    {
+      "file": "logo-ler.svg",
+      "path": "/img/type/logo-ler.svg",
+      "slug": "ler",
+      "name": "Ler"
+    },
+    {
+      "file": "logo-lio.svg",
+      "path": "/img/type/logo-lio.svg",
+      "slug": "lio",
+      "name": "Lio"
+    },
+    {
+      "file": "logo-lunea.svg",
+      "path": "/img/type/logo-lunea.svg",
+      "slug": "lunea",
+      "name": "Lunea"
+    },
+    {
+      "file": "logo-metrolor.svg",
+      "path": "/img/type/logo-metrolor.svg",
+      "slug": "metrolor",
+      "name": "Metrolor"
+    },
+    {
+      "file": "logo-mobigo.svg",
+      "path": "/img/type/logo-mobigo.svg",
+      "slug": "mobigo",
+      "name": "Mobigo"
+    },
+    {
+      "file": "logo-nomad.svg",
+      "path": "/img/type/logo-nomad.svg",
+      "slug": "nomad",
+      "name": "Nomad"
+    },
+    {
+      "file": "logo-occitanie.svg",
+      "path": "/img/type/logo-occitanie.svg",
+      "slug": "occitanie",
+      "name": "Occitanie"
+    },
+    {
+      "file": "logo-ouigo.svg",
+      "path": "/img/type/logo-ouigo.svg",
+      "slug": "ouigo",
+      "name": "OUIGO"
+    },
+    {
+      "file": "logo-ouigo-classique.svg",
+      "path": "/img/type/logo-ouigo-classique.svg",
+      "slug": "ouigo-classique",
+      "name": "OUIGO Trains Classiques"
+    },
+    {
+      "file": "logo-remi.svg",
+      "path": "/img/type/logo-remi.svg",
+      "slug": "remi",
+      "name": "Remi"
+    },
+    {
+      "file": "logo-renfeave.svg",
+      "path": "/img/type/logo-renfeave.svg",
+      "slug": "renfeave",
+      "name": "Renfe AVE"
+    },
+    {
+      "file": "logo-rer-a.svg",
+      "path": "/img/type/logo-rer-a.svg",
+      "slug": "rer-a",
+      "name": "RER A"
+    },
+    {
+      "file": "logo-rer-b.svg",
+      "path": "/img/type/logo-rer-b.svg",
+      "slug": "rer-b",
+      "name": "RER B"
+    },
+    {
+      "file": "logo-rer-c.svg",
+      "path": "/img/type/logo-rer-c.svg",
+      "slug": "rer-c",
+      "name": "RER C"
+    },
+    {
+      "file": "logo-rer-d.svg",
+      "path": "/img/type/logo-rer-d.svg",
+      "slug": "rer-d",
+      "name": "RER D"
+    },
+    {
+      "file": "logo-rer-e.svg",
+      "path": "/img/type/logo-rer-e.svg",
+      "slug": "rer-e",
+      "name": "RER E"
+    },
+    {
+      "file": "logo-sbb.svg",
+      "path": "/img/type/logo-sbb.svg",
+      "slug": "sbb",
+      "name": "SBB"
+    },
+    {
+      "file": "logo-sncb.svg",
+      "path": "/img/type/logo-sncb.svg",
+      "slug": "sncb",
+      "name": "SNCB"
+    },
+    {
+      "file": "logo-sncf.svg",
+      "path": "/img/type/logo-sncf.svg",
+      "slug": "sncf",
+      "name": "Sncf"
+    },
+    {
+      "file": "sncf-voyageurs-logo.png",
+      "path": "/img/type/sncf-voyageurs-logo.png",
+      "slug": "sncf-voyageurs-logo",
+      "name": "SNCF"
+    },
+    {
+      "file": "logo-sncf1985.svg",
+      "path": "/img/type/logo-sncf1985.svg",
+      "slug": "sncf1985",
+      "name": "Sncf1985"
+    },
+    {
+      "file": "logo-sncf1992.svg",
+      "path": "/img/type/logo-sncf1992.svg",
+      "slug": "sncf1992",
+      "name": "Sncf1992"
+    },
+    {
+      "file": "logo-t-h.svg",
+      "path": "/img/type/logo-t-h.svg",
+      "slug": "t-h",
+      "name": "T H"
+    },
+    {
+      "file": "logo-t-j.svg",
+      "path": "/img/type/logo-t-j.svg",
+      "slug": "t-j",
+      "name": "T J"
+    },
+    {
+      "file": "logo-t-k.svg",
+      "path": "/img/type/logo-t-k.svg",
+      "slug": "t-k",
+      "name": "T K"
+    },
+    {
+      "file": "logo-t-l.svg",
+      "path": "/img/type/logo-t-l.svg",
+      "slug": "t-l",
+      "name": "T L"
+    },
+    {
+      "file": "logo-t-n.svg",
+      "path": "/img/type/logo-t-n.svg",
+      "slug": "t-n",
+      "name": "T N"
+    },
+    {
+      "file": "logo-t-p.svg",
+      "path": "/img/type/logo-t-p.svg",
+      "slug": "t-p",
+      "name": "T P"
+    },
+    {
+      "file": "logo-t-r.svg",
+      "path": "/img/type/logo-t-r.svg",
+      "slug": "t-r",
+      "name": "T R"
+    },
+    {
+      "file": "logo-t-u.svg",
+      "path": "/img/type/logo-t-u.svg",
+      "slug": "t-u",
+      "name": "T U"
+    },
+    {
+      "file": "logo-teoz.svg",
+      "path": "/img/type/logo-teoz.svg",
+      "slug": "teoz",
+      "name": "Teoz"
+    },
+    {
+      "file": "logo-ter.svg",
+      "path": "/img/type/logo-ter.svg",
+      "slug": "ter",
+      "name": "TER"
+    },
+    {
+      "file": "logo-ter-rhone-alpes.svg",
+      "path": "/img/type/logo-ter-rhone-alpes.svg",
+      "slug": "ter-rhone-alpes",
+      "name": "TER Rhone Alpes"
+    },
+    {
+      "file": "logo-teralsace.svg",
+      "path": "/img/type/logo-teralsace.svg",
+      "slug": "teralsace",
+      "name": "Teralsace"
+    },
+    {
+      "file": "logo-teraquitaine.svg",
+      "path": "/img/type/logo-teraquitaine.svg",
+      "slug": "teraquitaine",
+      "name": "Teraquitaine"
+    },
+    {
+      "file": "logo-terbassenormandie.svg",
+      "path": "/img/type/logo-terbassenormandie.svg",
+      "slug": "terbassenormandie",
+      "name": "Terbassenormandie"
+    },
+    {
+      "file": "logo-terbourgogne.svg",
+      "path": "/img/type/logo-terbourgogne.svg",
+      "slug": "terbourgogne",
+      "name": "Terbourgogne"
+    },
+    {
+      "file": "logo-terbretagne.svg",
+      "path": "/img/type/logo-terbretagne.svg",
+      "slug": "terbretagne",
+      "name": "Terbretagne"
+    },
+    {
+      "file": "logo-tercentre.svg",
+      "path": "/img/type/logo-tercentre.svg",
+      "slug": "tercentre",
+      "name": "Tercentre"
+    },
+    {
+      "file": "logo-terlanguedocroussillon.svg",
+      "path": "/img/type/logo-terlanguedocroussillon.svg",
+      "slug": "terlanguedocroussillon",
+      "name": "Terlanguedocroussillon"
+    },
+    {
+      "file": "logo-termidipyrenees.svg",
+      "path": "/img/type/logo-termidipyrenees.svg",
+      "slug": "termidipyrenees",
+      "name": "Termidipyrenees"
+    },
+    {
+      "file": "logo-ternordpasdecalais.svg",
+      "path": "/img/type/logo-ternordpasdecalais.svg",
+      "slug": "ternordpasdecalais",
+      "name": "Ternordpasdecalais"
+    },
+    {
+      "file": "logo-terpoitoucharentes.svg",
+      "path": "/img/type/logo-terpoitoucharentes.svg",
+      "slug": "terpoitoucharentes",
+      "name": "Terpoitoucharentes"
+    },
+    {
+      "file": "logo-tgv.svg",
+      "path": "/img/type/logo-tgv.svg",
+      "slug": "tgv",
+      "name": "TGV"
+    },
+    {
+      "file": "logo-inoui.svg",
+      "path": "/img/type/logo-inoui.svg",
+      "slug": "inoui",
+      "name": "TGV InOui"
+    },
+    {
+      "file": "logo-lyria.svg",
+      "path": "/img/type/logo-lyria.svg",
+      "slug": "lyria",
+      "name": "TGV Lyria"
+    },
+    {
+      "file": "logo-thalys.svg",
+      "path": "/img/type/logo-thalys.svg",
+      "slug": "thalys",
+      "name": "Thalys"
+    },
+    {
+      "file": "logo-thello.svg",
+      "path": "/img/type/logo-thello.svg",
+      "slug": "thello",
+      "name": "Thello"
+    },
+    {
+      "file": "track-car.svg",
+      "path": "/img/type/track-car.svg",
+      "slug": "track-car",
+      "name": "Track Car"
+    },
+    {
+      "file": "logo-tramtrain.svg",
+      "path": "/img/type/logo-tramtrain.svg",
+      "slug": "tramtrain",
+      "name": "Tramtrain"
+    },
+    {
+      "file": "logo-trenitalia.svg",
+      "path": "/img/type/logo-trenitalia.svg",
+      "slug": "trenitalia",
+      "name": "Trenitalia"
+    },
+    {
+      "file": "logo-zou.svg",
+      "path": "/img/type/logo-zou.svg",
+      "slug": "zou",
+      "name": "Zou"
+    }
+  ]
+}

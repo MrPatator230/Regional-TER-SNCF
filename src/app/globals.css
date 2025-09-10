@@ -1,0 +1,647 @@
+@import "@sncf/bootstrap-sncf.communication/dist/bootstrap-sncf.min.css";
+
+@import "wcs-core/dist/wcs/wcs.css";
+/* styles.scss */
+@import "wcs-core/design-tokens/dist/sncf-voyageurs.css";
+/* FONTS */
+
+@font-face {
+  font-family: Avenir;
+  src: url("../fonts/avenir-lighter.woff");
+  font-weight: 100;
+}
+
+@font-face {
+  font-family: Avenir;
+  src: url("../fonts/avenir-book.woff");
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: Avenir;
+  src: url("../fonts/avenir-roman.woff");
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: Avenir;
+  src: url("../fonts/avenir-medium.woff");
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: Avenir;
+  src: url("../fonts/avenir-heavy.woff");
+  font-weight: 800;
+}
+
+@font-face {
+  font-family: Avenir;
+  src: url("../fonts/avenir-black.woff");
+  font-weight: 900;
+}
+
+/* ICONES FONTS */
+
+@font-face {
+  font-family: "icons";
+  src: url("../css/assets/fonts/icons/icons.eot") format("embedded-opentype"),
+  url("../css/assets/fonts/icons/icons.woff2") format("woff2"),
+  url("../css/assets/fonts/icons/icons.woff") format("woff"),
+  url("../css/assets/fonts/icons/icons.ttf") format("truetype"),
+  url("../css/assets/fonts/icons/icons.svg") format("svg");
+}
+
+/* Include material icons fonts */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/materialicons/v139/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Material Icons Outlined';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/materialiconsoutlined/v108/gok-H7zzDkdnRel8-DQ6KAXJ69wP1tGnf4ZGhUce.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Material Icons Two Tone';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/materialiconstwotone/v111/hESh6WRmNCxEqUmNyh3JDeGxjVVyMg4tHGctNCu0.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Material Icons Round';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/materialiconsround/v107/LDItaoyNOAY6Uewc665JcIzCKsKc_M9flwmP.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Material Icons Sharp';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/materialiconssharp/v108/oPWQ_lt5nv4pWNJpghLP75WiFR4kLh3kvmvR.woff2) format('woff2');
+}
+
+:root {
+  --sncf-green: #3a7551;
+  --sncf-yellow: #fde500;
+  --sncf-light-gray: #f6f6f6;
+  --sncf-medium-gray: #e5e5e5;
+  --sncf-dark-gray: #666666;
+  --sncf-text: #1a1a1a;
+  --sncf-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  /* Largeurs des colonnes du planner (héros) */
+  --planner-left-col: 520px; /* largeur du bloc de recherche */
+  --planner-right-col: 350px; /* largeur colonne info */
+}
+
+body {
+  font-family: 'Avenir', sans-serif;
+  background-color: #f8f8f8;
+  color: var(--sncf-text);
+  margin: 0;
+}
+
+.top-banner {
+  background-color: var(--sncf-yellow);
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.top-banner a {
+  color: var(--sncf-text);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.hero-section {
+  background-image: url('../img/background-home.jpg');
+  background-size: cover;
+  background-position: center bottom;
+  background-attachment: fixed; /* maintient l’image en place pendant les transitions */
+  padding: 2rem 0;
+  will-change: transform;            /* stabilise la peinture pendant l’anim */
+  transform: translateZ(0);          /* force la composition GPU */
+  backface-visibility: hidden;       /* évite les artefacts de rendu */
+}
+
+/* Désactive background-attachment: fixed sur iOS pour éviter les glitches connus */
+@supports (-webkit-overflow-scrolling: touch) {
+  .hero-section {
+    background-attachment: scroll;
+  }
+}
+
+.hero-title {
+  color: white;
+  font-size: 2rem;
+  font-weight: 900;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  margin-bottom: 2rem;
+}
+
+.main-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.planner-container {
+  display: grid;
+  grid-template-columns: var(--planner-left-col) var(--planner-right-col);
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+/* Sur écrans moyens, la colonne gauche devient fluide */
+@media (max-width: 1200px) {
+  .planner-container {
+    grid-template-columns: 1fr var(--planner-right-col);
+  }
+}
+
+/* Sur mobile, empiler les blocs */
+@media (max-width: 900px) {
+  .planner-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background-color: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: var(--sncf-card-shadow);
+}
+
+.planner-card {
+  display: grid;
+  gap: 1rem;
+  position: relative;
+}
+
+.planner-input {
+  display: flex;
+  align-items: center;
+  background-color: var(--sncf-light-gray);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.planner-input wcs-mat-icon {
+  color: var(--sncf-green);
+  margin-right: 0.75rem;
+}
+
+.planner-input .placeholder {
+  color: #6c757d;
+  flex-grow: 1;
+}
+
+.planner-input .value {
+  font-weight: bold;
+  flex-grow: 1;
+}
+
+.swap-button {
+  position: absolute;
+  top: 48px;
+  right: 1.5rem;
+  z-index: 2;
+  --wcs-button-background-color-clear: transparent;
+}
+
+.via-button {
+  text-align: right;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--sncf-dark-gray);
+  cursor: pointer;
+  margin-top: -0.5rem;
+  margin-bottom: -0.5rem;
+}
+
+.search-button {
+  --wcs-button-background-color: var(--sncf-green);
+  --wcs-button-border-color: var(--sncf-green);
+  --wcs-button-color: white;
+  width: 100%;
+}
+
+.info-trafic-card, .sabonner-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.info-trafic-card h5, .sabonner-card h5 {
+  font-weight: bold;
+  margin: 0;
+}
+
+.info-trafic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-trafic-header wcs-tag {
+    --wcs-tag-bg-color: #dc3545;
+    --wcs-tag-color: white;
+    --wcs-tag-border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.info-trafic-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  position: relative;
+  padding-top: 1.75rem;
+}
+
+.info-trafic-footer wcs-button {
+  --wcs-button-border-color: var(--sncf-medium-gray);
+  --wcs-button-color: var(--sncf-text);
+  font-size: 0.9rem;
+}
+
+.toggle-pill {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px dashed var(--sncf-medium-gray);
+  background: #fff;
+  border-radius: 999px !important;
+  padding: 0.25rem 1rem !important;
+}
+
+.sabonner-card {
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: height 300ms ease, opacity 200ms ease, margin 300ms ease;
+  will-change: height;
+}
+.sabonner-card.collapsed {
+  /* ne pas forcer la hauteur ici: gérée par JS pour une anim fluide */
+  opacity: 0;
+  margin: 0 !important;
+  pointer-events: none;
+}
+
+/* --- Info trafic (maquette) --- */
+.info-trafic-card {
+  border-radius: 16px;
+  padding: 0; /* on gère les paddings par section */
+}
+
+.info-trafic-header {
+  padding: 1.25rem 1.25rem 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--sncf-medium-gray);
+}
+
+.info-trafic-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.info-type-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+}
+
+.info-type-label {
+  color: var(--sncf-dark-gray);
+  font-size: 1.05rem;
+}
+
+.info-type-chip {
+  --wcs-tag-bg-color: #1e88e5;
+  --wcs-tag-color: white;
+  --wcs-tag-border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Nettoyage de l’ancienne définition: on conserve l’overflow et l’animation par max-height */
+.info-trafic-details {
+  padding: 0.75rem 1.25rem 1.25rem 1.25rem;
+  overflow: hidden;               /* cache la seconde moitié en mode normal */
+  transition: max-height 300ms ease; /* animation ouverture/fermeture */
+}
+
+.info-article-title {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.5rem 0;
+}
+
+.info-trafic-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  border-top: 1px solid var(--sncf-medium-gray);
+  padding: 0.75rem 1.25rem 1rem 1.25rem;
+}
+
+.toggle-pill {
+  --wcs-button-background-color-clear: var(--sncf-light-gray);
+  --wcs-button-color: var(--sncf-text);
+  --wcs-button-border-color: var(--sncf-light-gray);
+  border-radius: 999px !important;
+  padding: 0.25rem 0.9rem !important;
+}
+
+.info-pagination {
+  align-self: center;
+}
+
+/* ====== Section contenu sous le héros ====== */
+.main-content {
+  padding: 2rem 0 3rem;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px; /* gauche large, droite fixe */
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .content-grid {
+    grid-template-columns: 1fr 320px;
+  }
+}
+
+@media (max-width: 900px) {
+  .content-grid {
+    grid-template-columns: 1fr; /* empile sur mobile */
+  }
+}
+
+/* ====== Carte Prochains départs (gauche) ====== */
+.prochains-departs-card {
+  border-radius: 12px;
+  padding: 1rem 0.75rem;
+}
+
+.prochains-departs-card h4 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0 0 0.75rem 0.5rem;
+}
+
+.prochains-departs-tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.75rem;
+}
+
+/* Mise en avant du bouton actif (attribut "active" posé dans le JSX) */
+.prochains-departs-tabs wcs-button[active] {
+  --wcs-button-background-color: #e9f3ed;
+  --wcs-button-border-color: var(--sncf-green);
+  --wcs-button-color: var(--sncf-green);
+}
+
+.departures-header {
+  display: grid;
+  grid-template-columns: 100px 1fr 90px;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--sncf-dark-gray);
+}
+
+.departure-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 90px 40px;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem;
+  border-top: 1px solid var(--sncf-medium-gray);
+}
+
+.departure-time {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.departure-time strong {
+  font-size: 1rem;
+}
+
+.delayed {
+  color: #dc3545;
+  text-decoration: line-through;
+}
+
+.departure-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.train-details {
+  color: var(--sncf-dark-gray);
+  font-size: 0.9rem;
+}
+
+.departure-track {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background: #e8f1ec;
+  color: var(--sncf-green);
+  font-weight: 800;
+}
+
+.info-message, .delay-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--sncf-dark-gray);
+  padding: 0.5rem 0.75rem;
+}
+
+.delay-message wcs-mat-icon {
+  color: #f39c12;
+}
+
+.more-times {
+  text-align: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.more-times a { text-decoration: none; font-weight: 600; }
+
+/* ====== Colonne actualités (droite) ====== */
+.promo-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.promo-card {
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.promo-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.promo-card h5 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin: 1rem 1rem 0.25rem;
+}
+
+.promo-card p {
+  margin: 0 1rem 1rem;
+  color: var(--sncf-dark-gray);
+}
+
+.promo-card wcs-button {
+  --wcs-button-background-color: var(--sncf-green);
+  --wcs-button-border-color: var(--sncf-green);
+  --wcs-button-color: white;
+  margin: 0 1rem 1rem;
+}
+
+.info-trafic-contenu {
+  font-size: 1rem; /* taille de base augmentée */
+  line-height: 1.5;
+}
+.info-trafic-contenu p { margin: 0 0 .6rem 0; }
+.info-trafic-contenu a { color: var(--sncf-green); text-decoration: underline; word-break: break-word; }
+.info-trafic-contenu ul, .info-trafic-contenu ol { padding-left: 1.25rem; margin: 0 0 .75rem 0; }
+.info-trafic-contenu li { margin: 0 0 .35rem 0; }
+.info-trafic-details p { font-size: .95rem; }
+@media (min-width: 992px){
+  .info-trafic-contenu { font-size: 1.05rem; }
+  .info-trafic-details p { font-size: 1rem; }
+}
+
+.info-article-head { display:flex; align-items:center; gap:.55rem; }
+.info-type-icon { width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; flex:0 0 32px; font-size:1.15rem; }
+.info-type-icon.information { background:#1e88e5; color:#fff; }
+.info-type-icon.annulation { background:#dc3545; color:#fff; }
+.info-type-icon.attention { background:#f39c12; color:#fff; }
+.info-type-icon.travaux { background:#3a7551; color:#fff; }
+@media (min-width:992px){ .info-type-icon { width:34px; height:34px; font-size:1.2rem; } }
+
+.planner-container.with-suggest { grid-template-columns: var(--planner-left-col) 320px var(--planner-right-col); }
+@media (max-width: 1200px){ .planner-container.with-suggest { grid-template-columns: 1fr 320px var(--planner-right-col); } }
+@media (max-width: 1050px){ .planner-container.with-suggest { grid-template-columns: 1fr; } .station-suggest-panel { position:relative; order:2; } }
+
+.station-suggest-panel { background:#fff; border-radius:8px; padding:1.25rem 1rem 1rem; box-shadow: var(--sncf-card-shadow); align-self:start; max-height:540px; overflow:auto; animation: fadeIn .18s ease; }
+.station-suggest-panel .panel-title { font-size:1.15rem; font-weight:800; margin:0 0 .25rem; }
+.station-suggest-panel hr { border:none; border-top:1px solid var(--sncf-medium-gray); margin:.35rem 0 .5rem; }
+.station-suggest-list { list-style:none; margin:0; padding:0; }
+.station-suggest-list li { display:flex; align-items:center; gap:.5rem; padding:.45rem .55rem; cursor:pointer; border-radius:4px; font-size:.9rem; }
+.station-suggest-list li:hover, .station-suggest-list li.active { background:#e9f3ed; }
+.station-suggest-list li.empty { cursor:default; font-style:italic; color:var(--sncf-dark-gray); }
+.station-suggest-list wcs-mat-icon { color: var(--sncf-green); }
+
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
+
+/* ---- Styles carte horaires (.journey-row) ---- */
+.journey-row { background:#fff; border:1px solid #e3e3e3; border-radius:6px; padding:.65rem 1rem .75rem; box-shadow:0 1px 2px rgba(0,0,0,.04); display:flex; flex-direction:column; gap:.35rem; position:relative; }
+.journey-row + .journey-row { margin-top:.6rem; }
+.journey-row:hover { box-shadow:0 3px 10px rgba(0,0,0,.08); }
+.journey-row.expanded { border-color:#d0e0d6; box-shadow:0 4px 14px rgba(0,0,0,.12); }
+.jr-main { display:grid; grid-template-columns:120px 1fr 120px 140px; align-items:center; gap:1.25rem; }
+.col-time { display:flex; flex-direction:column; gap:.2rem; font-size:.72rem; line-height:1.1; }
+.col-time .time { font-size:1.15rem; font-weight:700; line-height:1; }
+.col-time.dep .station, .col-time.arr .station { font-weight:600; }
+.col-line { position:relative; height:34px; display:flex; align-items:center; }
+.col-line .line { position:relative; height:2px; background:#111; width:100%; display:block; }
+.col-line .line:before, .col-line .line:after { content:""; position:absolute; top:50%; width:10px; height:10px; margin-top:-5px; background:#111; border-radius:50%; }
+.col-line .line:before { left:0; }
+.col-line .line:after { right:0; }
+.col-line .duration { position:absolute; top:-10px; left:50%; transform:translateX(-50%); font-size:.62rem; font-weight:600; background:#fff; padding:0 4px; color:#333; }
+.col-price { background:#0a5c2d; color:#fff; border-radius:4px; padding:.45rem .9rem .6rem; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:120px; }
+.col-price .class-label { font-size:.55rem; font-weight:600; letter-spacing:.5px; text-transform:uppercase; opacity:.85; }
+.col-price .from-label { background:#fff; color:#0a5c2d; font-size:.55rem; font-weight:700; border-radius:10px; padding:2px 6px; margin:2px 0 4px; line-height:1; }
+.col-price .price { font-size:.95rem; font-weight:800; letter-spacing:.5px; }
+.jr-meta { display:flex; align-items:center; gap:.35rem; font-size:.58rem; font-weight:600; color:#2a2a2a; margin-left:120px; }
+.details-pill { margin-top:.25rem; align-self:flex-start; background:#e7efea; border:1px solid #d6e5dc; font-size:.55rem; font-weight:600; padding:2px 8px; border-radius:12px; cursor:pointer; color:#1d5138; }
+.details-pill:hover { background:#d9e8df; }
+.jr-details { max-height:0; overflow:hidden; transition:max-height .35s ease; }
+.journey-row.expanded .jr-details { max-height:180px; }
+.jr-details .details-inner { background:#f7faf8; border:1px solid #e2ece6; border-radius:4px; padding:.6rem .8rem; font-size:.6rem; }
+.jr-details .stops-list { list-style:disc; padding-left:1rem; margin:0; }
+@media (max-width:900px){ .jr-main { grid-template-columns:90px 1fr 90px 110px; gap:.75rem; } .jr-meta { margin-left:0; } }
+
+/* === Cartes résultats horaires (nouvelle version) === */
+.result-card { background:#fff; border:1px solid #e2e2e2; border-radius:8px; padding:.85rem 1rem .9rem; display:flex; flex-direction:column; gap:.35rem; box-shadow:0 1px 2px rgba(0,0,0,.04); position:relative; }
+.result-card + .result-card { margin-top:.9rem; }
+.result-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.result-card.expanded { border-color:#d0e0d6; box-shadow:0 5px 18px rgba(0,0,0,.12); }
+.rc-grid { display:grid; grid-template-columns:110px 1fr 110px 132px; gap:1.75rem; align-items:center; }
+@media (max-width:1100px){ .rc-grid { gap:1.25rem; grid-template-columns:100px 1fr 100px 120px; } }
+@media (max-width:780px){ .rc-grid { grid-template-columns:94px 1fr 94px 110px; gap:.9rem; } }
+.rc-col { display:flex; flex-direction:column; gap:.15rem; font-size:.7rem; line-height:1.1; }
+.rc-time { font-size:1.2rem; font-weight:800; line-height:1; letter-spacing:.5px; }
+.rc-station { font-weight:600; }
+/* Ligne de durée */
+.rc-line { position:relative; height:40px; display:flex; align-items:center; }
+.rc-track { position:relative; flex:1; display:flex; align-items:center; justify-content:space-between; }
+.rc-dot { width:10px; height:10px; background:#111; border-radius:50%; flex:0 0 10px; }
+.rc-seg { flex:1; height:2px; background:#111; }
+.rc-duration { position:absolute; top:-11px; left:50%; transform:translateX(-50%); font-size:.62rem; font-weight:600; background:#fff; padding:0 6px; letter-spacing:.3px; }
+/* Bloc tarif */
+.rc-fare { background:#0a5c2d; color:#fff; border-radius:4px; padding:.45rem .95rem .55rem; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:54px; position:relative; }
+.rc-fare.min { background:#0a5c2d; }
+.rc-class { font-size:.55rem; font-weight:600; letter-spacing:.5px; text-transform:uppercase; opacity:.9; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.rc-from { background:#fff; color:#0a5c2d; font-size:.55rem; font-weight:700; border-radius:10px; padding:2px 6px; line-height:1; }
+.rc-price { font-size:.95rem; font-weight:800; letter-spacing:.5px; margin-top:2px; }
+/* Ligne méta train */
+.rc-train { display:flex; align-items:center; gap:.4rem; font-size:.58rem; font-weight:600; color:#2c2c2c; margin-left:110px; }
+@media (max-width:780px){ .rc-train { margin-left:0; } }
+/* Bouton détails */
+.rc-details-btn { margin-top:.2rem; background:#eef4ef; border:1px solid #d4e3da; font-size:.55rem; font-weight:600; padding:2px 10px 3px; border-radius:14px; cursor:pointer; color:#1d5138; line-height:1; }
+.rc-details-btn:hover { background:#e1ede6; }
+/* Détails repliables */
+.rc-details { max-height:0; overflow:hidden; transition:max-height .35s ease; }
+.result-card.expanded .rc-details { max-height:180px; }
+.rc-details-inner { background:#f7faf8; border:1px solid #e2ece6; border-radius:4px; padding:.6rem .8rem; font-size:.6rem; }
+.rc-stops { list-style:disc; padding-left:1rem; margin:0; display:flex; flex-direction:column; gap:.25rem; }
+/* Ajustements typographiques de la section globale */
+.results-column h2 { font-size:1.15rem; font-weight:800; margin:0 0 .5rem; letter-spacing:.3px; }
+.results-date-row { font-size:.78rem; }
+.list-nav button.linklike { font-size:.7rem; }
+/* Nettoyage anciens styles si présents (facultatif) */
+.journey-row { display:none; }

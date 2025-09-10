@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <rect width="640" height="360" fill="#fff3e0" rx="12"/>
+  <g font-family="Avenir, Arial, sans-serif" fill="#1b1b1b">
+    <text x="40" y="86" font-size="28" font-weight="800" fill="#ff7043">Montbéliard</text>
+    <text x="40" y="120" font-size="20" font-weight="600">du 21 au 24 août 2025</text>
+
+    <text x="40" y="180" font-size="46" font-weight="900" fill="#e91e63">Festival des mômes</text>
+    <text x="40" y="220" font-size="22" font-weight="700">Allez-y en TRAIN Mobigo</text>
+    <rect x="40" y="238" width="210" height="46" rx="8" fill="#2e7d32"/>
+    <text x="55" y="269" font-size="22" font-weight="800" fill="#ffffff">À partir de 6€</text>
+  </g>
+</svg>
+

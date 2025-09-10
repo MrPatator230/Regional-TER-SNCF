@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="gc" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fde500"/>
+      <stop offset="1" stop-color="#ffb300"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#gc)" rx="12"/>
+  <g font-family="Avenir, Arial, sans-serif" fill="#101010">
+    <text x="40" y="120" font-size="72" font-weight="800">GOLDEN</text>
+    <text x="40" y="200" font-size="72" font-weight="800">COAST</text>
+    <text x="40" y="255" font-size="22" font-weight="700">Allez-y en TRAIN Mobigo</text>
+    <rect x="40" y="270" width="210" height="46" rx="8" fill="#d4145a"/>
+    <text x="55" y="301" font-size="22" font-weight="800" fill="#ffffff">À partir de 6€</text>
+  </g>
+</svg>
+

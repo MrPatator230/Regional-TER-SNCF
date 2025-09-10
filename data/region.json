@@ -1,0 +1,485 @@
+{
+  "company": {
+    "name": "FERROVIA BOURGOGNE - FRANCHE-COMTÉ",
+    "currency": "EUR",
+    "description": ""
+  },
+  "types": [
+    {
+      "slug": "cfl",
+      "name": "CFL",
+      "icon": "/img/type/logo-cfl.svg",
+      "logo": "logo-cfl.svg",
+      "category": "International"
+    },
+    {
+      "slug": "db",
+      "name": "DB",
+      "icon": "/img/type/logo-db.svg",
+      "logo": "logo-db.svg",
+      "category": "International"
+    },
+    {
+      "slug": "eurostar",
+      "name": "Eurostar",
+      "icon": "/img/type/logo-eurostar.svg",
+      "logo": "logo-eurostar.svg",
+      "category": "International"
+    },
+    {
+      "slug": "frecciarossa",
+      "name": "Frecciarossa",
+      "icon": "/img/type/logo-frecciarossa.svg",
+      "logo": "logo-frecciarossa.svg",
+      "category": "International"
+    },
+    {
+      "slug": "ice",
+      "name": "ICE",
+      "icon": "/img/type/logo-ice.svg",
+      "logo": "logo-ice.svg",
+      "category": "International"
+    },
+    {
+      "slug": "renfeave",
+      "name": "Renfe AVE",
+      "icon": "/img/type/logo-renfeave.svg",
+      "logo": "logo-renfeave.svg",
+      "category": "International"
+    },
+    {
+      "slug": "sbb",
+      "name": "SBB",
+      "icon": "/img/type/logo-sbb.svg",
+      "logo": "logo-sbb.svg",
+      "category": "International"
+    },
+    {
+      "slug": "sncb",
+      "name": "SNCB",
+      "icon": "/img/type/logo-sncb.svg",
+      "logo": "logo-sncb.svg",
+      "category": "International"
+    },
+    {
+      "slug": "lyria",
+      "name": "TGV Lyria",
+      "icon": "/img/type/logo-lyria.svg",
+      "logo": "logo-lyria.svg",
+      "category": "International"
+    },
+    {
+      "slug": "sncf",
+      "name": "Sncf",
+      "icon": "/img/type/logo-sncf.svg",
+      "logo": "logo-sncf.svg",
+      "category": "Logos SNCF"
+    },
+    {
+      "slug": "sncf-voyageurs-logo",
+      "name": "SNCF Voyageurs",
+      "icon": "/img/type/sncf-voyageurs-logo.png",
+      "logo": "sncf-voyageurs-logo.png",
+      "category": "Logos SNCF"
+    },
+    {
+      "slug": "sncf1985",
+      "name": "Sncf1985",
+      "icon": "/img/type/logo-sncf1985.svg",
+      "logo": "logo-sncf1985.svg",
+      "category": "Logos SNCF"
+    },
+    {
+      "slug": "sncf1992",
+      "name": "Sncf1992",
+      "icon": "/img/type/logo-sncf1992.svg",
+      "logo": "logo-sncf1992.svg",
+      "category": "Logos SNCF"
+    },
+    {
+      "slug": "intercites",
+      "name": "Intercités",
+      "icon": "/img/type/logo-intercites.svg",
+      "logo": "logo-intercites.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "ouigo",
+      "name": "OUIGO",
+      "icon": "/img/type/logo-ouigo.svg",
+      "logo": "logo-ouigo.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "ouigo-classique",
+      "name": "OUIGO Trains Classiques",
+      "icon": "/img/type/logo-ouigo-classique.svg",
+      "logo": "logo-ouigo-classique.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "rer-a",
+      "name": "RER A",
+      "icon": "/img/type/logo-rer-a.svg",
+      "logo": "logo-rer-a.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "rer-b",
+      "name": "RER B",
+      "icon": "/img/type/logo-rer-b.svg",
+      "logo": "logo-rer-b.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "rer-c",
+      "name": "RER C",
+      "icon": "/img/type/logo-rer-c.svg",
+      "logo": "logo-rer-c.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "rer-d",
+      "name": "RER D",
+      "icon": "/img/type/logo-rer-d.svg",
+      "logo": "logo-rer-d.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "rer-e",
+      "name": "RER E",
+      "icon": "/img/type/logo-rer-e.svg",
+      "logo": "logo-rer-e.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-h",
+      "name": "T H",
+      "icon": "/img/type/logo-t-h.svg",
+      "logo": "logo-t-h.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-j",
+      "name": "T J",
+      "icon": "/img/type/logo-t-j.svg",
+      "logo": "logo-t-j.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-k",
+      "name": "T K",
+      "icon": "/img/type/logo-t-k.svg",
+      "logo": "logo-t-k.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-l",
+      "name": "T L",
+      "icon": "/img/type/logo-t-l.svg",
+      "logo": "logo-t-l.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-n",
+      "name": "T N",
+      "icon": "/img/type/logo-t-n.svg",
+      "logo": "logo-t-n.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-p",
+      "name": "T P",
+      "icon": "/img/type/logo-t-p.svg",
+      "logo": "logo-t-p.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-r",
+      "name": "T R",
+      "icon": "/img/type/logo-t-r.svg",
+      "logo": "logo-t-r.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "t-u",
+      "name": "T U",
+      "icon": "/img/type/logo-t-u.svg",
+      "logo": "logo-t-u.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "teoz",
+      "name": "Teoz",
+      "icon": "/img/type/logo-teoz.svg",
+      "logo": "logo-teoz.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "ter",
+      "name": "TER",
+      "icon": "/img/type/logo-ter.svg",
+      "logo": "logo-ter.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "ter-rhone-alpes",
+      "name": "TER Rhone Alpes",
+      "icon": "/img/type/logo-ter-rhone-alpes.svg",
+      "logo": "logo-ter-rhone-alpes.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "teralsace",
+      "name": "Teralsace",
+      "icon": "/img/type/logo-teralsace.svg",
+      "logo": "logo-teralsace.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "teraquitaine",
+      "name": "Teraquitaine",
+      "icon": "/img/type/logo-teraquitaine.svg",
+      "logo": "logo-teraquitaine.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "terbassenormandie",
+      "name": "Terbassenormandie",
+      "icon": "/img/type/logo-terbassenormandie.svg",
+      "logo": "logo-terbassenormandie.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "terbourgogne",
+      "name": "Terbourgogne",
+      "icon": "/img/type/logo-terbourgogne.svg",
+      "logo": "logo-terbourgogne.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "terbretagne",
+      "name": "Terbretagne",
+      "icon": "/img/type/logo-terbretagne.svg",
+      "logo": "logo-terbretagne.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "tercentre",
+      "name": "Tercentre",
+      "icon": "/img/type/logo-tercentre.svg",
+      "logo": "logo-tercentre.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "terlanguedocroussillon",
+      "name": "Terlanguedocroussillon",
+      "icon": "/img/type/logo-terlanguedocroussillon.svg",
+      "logo": "logo-terlanguedocroussillon.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "termidipyrenees",
+      "name": "Termidipyrenees",
+      "icon": "/img/type/logo-termidipyrenees.svg",
+      "logo": "logo-termidipyrenees.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "ternordpasdecalais",
+      "name": "Ternordpasdecalais",
+      "icon": "/img/type/logo-ternordpasdecalais.svg",
+      "logo": "logo-ternordpasdecalais.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "terpoitoucharentes",
+      "name": "Terpoitoucharentes",
+      "icon": "/img/type/logo-terpoitoucharentes.svg",
+      "logo": "logo-terpoitoucharentes.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "tgv",
+      "name": "TGV",
+      "icon": "/img/type/logo-tgv.svg",
+      "logo": "logo-tgv.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "inoui",
+      "name": "TGV InOui",
+      "icon": "/img/type/logo-inoui.svg",
+      "logo": "logo-inoui.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "thalys",
+      "name": "Thalys",
+      "icon": "/img/type/logo-thalys.svg",
+      "logo": "logo-thalys.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "thello",
+      "name": "Thello",
+      "icon": "/img/type/logo-thello.svg",
+      "logo": "logo-thello.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "track-car",
+      "name": "Track Car",
+      "icon": "/img/type/track-car.svg",
+      "logo": "track-car.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "tramtrain",
+      "name": "Tramtrain",
+      "icon": "/img/type/logo-tramtrain.svg",
+      "logo": "logo-tramtrain.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "trenitalia",
+      "name": "Trenitalia",
+      "icon": "/img/type/logo-trenitalia.svg",
+      "logo": "logo-trenitalia.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "zou",
+      "name": "Zou",
+      "icon": "/img/type/logo-zou.svg",
+      "logo": "logo-zou.svg",
+      "category": "Régional"
+    },
+    {
+      "slug": "aleop",
+      "name": "Aleop",
+      "icon": "/img/type/logo-aleop.svg",
+      "logo": "logo-aleop.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "auvergerhonealpes",
+      "name": "Auvergerhonealpes",
+      "icon": "/img/type/logo-auvergerhonealpes.svg",
+      "logo": "logo-auvergerhonealpes.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "breizhgo",
+      "name": "Breizhgo",
+      "icon": "/img/type/logo-breizhgo.svg",
+      "logo": "logo-breizhgo.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "fluo",
+      "name": "Fluo",
+      "icon": "/img/type/logo-fluo.svg",
+      "logo": "logo-fluo.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "hautsdefrance",
+      "name": "Hautsdefrance",
+      "icon": "/img/type/logo-hautsdefrance.svg",
+      "logo": "logo-hautsdefrance.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "lio",
+      "name": "Lio",
+      "icon": "/img/type/logo-lio.svg",
+      "logo": "logo-lio.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "mobigo",
+      "name": "Mobigo",
+      "icon": "/img/type/logo-mobigo.svg",
+      "logo": "logo-mobigo.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "nomad",
+      "name": "Nomad",
+      "icon": "/img/type/logo-nomad.svg",
+      "logo": "logo-nomad.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "occitanie",
+      "name": "Occitanie",
+      "icon": "/img/type/logo-occitanie.svg",
+      "logo": "logo-occitanie.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "remi",
+      "name": "Remi",
+      "icon": "/img/type/logo-remi.svg",
+      "logo": "logo-remi.svg",
+      "category": "Régions (après 2016)"
+    },
+    {
+      "slug": "ler",
+      "name": "Ler",
+      "icon": "/img/type/logo-ler.svg",
+      "logo": "logo-ler.svg",
+      "category": "Régions (avant 2016)"
+    },
+    {
+      "slug": "lunea",
+      "name": "Lunea",
+      "icon": "/img/type/logo-lunea.svg",
+      "logo": "logo-lunea.svg",
+      "category": "Régions (avant 2016)"
+    },
+    {
+      "slug": "metrolor",
+      "name": "Metrolor",
+      "icon": "/img/type/logo-metrolor.svg",
+      "logo": "logo-metrolor.svg",
+      "category": "Régions (avant 2016)"
+    }
+  ],
+  "footerLinks": [],
+  "tickets": [
+    {
+      "id": "60sk6i5",
+      "name": "Billet Simple TER -26 ",
+      "audience": "moins26",
+      "description": "",
+      "price": 3
+    },
+    {
+      "id": "19w9yl9",
+      "name": "Billet Simple TER +26",
+      "audience": "plus26",
+      "description": "",
+      "price": 9
+    }
+  ],
+  "promotions": [],
+  "subscriptions": [
+    {
+      "id": "b2qp2mi",
+      "title": "PASS MOBIGO -26 ",
+      "audience": "moins26",
+      "description": "",
+      "price": 33.5
+    },
+    {
+      "id": "zg2cbzp",
+      "title": "PASS MOBIGO +26",
+      "audience": "plus26",
+      "description": "",
+      "price": 77
+    }
+  ],
+  "events": []
+}
