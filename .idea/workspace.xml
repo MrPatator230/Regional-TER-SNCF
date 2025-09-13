@@ -4,16 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Alpha V4.0.5 // INITIAL COMMIT">
-      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.gitignore" afterDir="false" />
+    <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Patch Affichage des sillons en fonction des jours de circulations et des perturbations.">
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/public/stations/[id]/board/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/public/stations/[id]/board/route.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/lignes/lignes-manager.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/lignes/lignes-manager.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/lignes/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/lignes/page.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/perturbations/lignes/creation/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/perturbations/lignes/creation/page.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/page.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/page.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/prochains-departs/[id]/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/prochains-departs/[id]/page.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -97,7 +89,7 @@
       <updated>1757521804914</updated>
       <workItem from="1757521806417" duration="15520000" />
       <workItem from="1757763142213" duration="5368000" />
-      <workItem from="1757789656738" duration="484000" />
+      <workItem from="1757789656738" duration="1852000" />
     </task>
     <task id="LOCAL-00001" summary="Alpha V4.0.5 // INITIAL COMMIT">
       <option name="closed" value="true" />
@@ -107,7 +99,15 @@
       <option name="project" value="LOCAL" />
       <updated>1757522368989</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Patch Affichage des sillons en fonction des jours de circulations et des perturbations.">
+      <option name="closed" value="true" />
+      <created>1757790178080</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1757790178080</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -126,6 +126,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Alpha V4.0.5 // INITIAL COMMIT" />
-    <option name="LAST_COMMIT_MESSAGE" value="Alpha V4.0.5 // INITIAL COMMIT" />
+    <MESSAGE value="Patch Affichage des sillons en fonction des jours de circulations et des perturbations." />
+    <option name="LAST_COMMIT_MESSAGE" value="Patch Affichage des sillons en fonction des jours de circulations et des perturbations." />
   </component>
 </project>
