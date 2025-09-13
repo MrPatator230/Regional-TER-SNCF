@@ -7,7 +7,6 @@ export const dynamic = 'force-dynamic';
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function formatISODate(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
-function addMinutes(hhmm, delta){ if(!hhmm) return hhmm; const m=String(hhmm).match(/^([0-1]\d|2[0-3]):([0-5]\d)$/); if(!m) return hhmm; let mins=(+m[1])*60+(+m[2])+Number(delta||0); mins=((mins%1440)+1440)%1440; const H=(mins/60|0), M=mins%60; return pad2(H)+":"+pad2(M); }
 function timeToMin(t){ const m=String(t||'').match(/^([0-1]\d|2[0-3]):([0-5]\d)$/); if(!m) return null; return (+m[1])*60+(+m[2]); }
 
 function isPerturbationActiveFor(dateISO, timeHHMM, p){
@@ -45,6 +44,17 @@ function shouldShowBannerFor(dateISO, p){
   return d >= new Date(preStart.toISOString().slice(0,10)+'T00:00:00') && (!endOfEnd || d <= new Date(endOfEnd.toISOString().slice(0,10)+'T23:59:59'));
 }
 
+function bitRuns(days_mask, dateISO){
+  if(!dateISO) return true; // fallback
+  if(days_mask==null) return true;
+  const d = new Date(dateISO+"T00:00:00");
+  if(isNaN(d)) return true;
+  const jsDay = d.getDay(); // 0=Dim..6=Sam
+  // mapping bit0=Lun..bit6=Dim => index = (jsDay+6)%7
+  const idx = (jsDay+6)%7;
+  return (days_mask & (1<<idx)) !== 0;
+}
+
 export async function GET(req, ctx){
   try {
     const { searchParams } = new URL(req.url);
@@ -77,7 +87,8 @@ export async function GET(req, ctx){
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(s.departure_time,'%H:%i') AS time,
                  sp.platform AS platform,
-                 s.departure_station_id AS current_station_id
+                 s.departure_station_id AS current_station_id,
+                 s.days_mask, s.flag_custom
             FROM sillons s
             JOIN stations ds  ON ds.id  = s.departure_station_id
             JOIN stations as2 ON as2.id = s.arrival_station_id
@@ -92,7 +103,8 @@ export async function GET(req, ctx){
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(st.departure_time,'%H:%i') AS time,
                  sp.platform AS platform,
-                 st.station_id AS current_station_id
+                 st.station_id AS current_station_id,
+                 s.days_mask, s.flag_custom
             FROM sillons s
             JOIN stations ds  ON ds.id  = s.departure_station_id
             JOIN stations as2 ON as2.id = s.arrival_station_id
@@ -113,7 +125,8 @@ export async function GET(req, ctx){
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(s.arrival_time,'%H:%i') AS time,
                  sp.platform AS platform,
-                 s.arrival_station_id AS current_station_id
+                 s.arrival_station_id AS current_station_id,
+                 s.days_mask, s.flag_custom
             FROM sillons s
             JOIN stations ds  ON ds.id  = s.departure_station_id
             JOIN stations as2 ON as2.id = s.arrival_station_id
@@ -128,7 +141,8 @@ export async function GET(req, ctx){
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(st.arrival_time,'%H:%i') AS time,
                  sp.platform AS platform,
-                 st.station_id AS current_station_id
+                 st.station_id AS current_station_id,
+                 s.days_mask, s.flag_custom
             FROM sillons s
             JOIN stations ds  ON ds.id  = s.departure_station_id
             JOIN stations as2 ON as2.id = s.arrival_station_id
@@ -144,6 +158,32 @@ export async function GET(req, ctx){
 
     // Index des arrêts pour déterminer l'application des retards et modifs
     const scheduleIds = Array.from(new Set(rows.map(r=> r.id)));
+    // Pré-chargement inclusions / exclusions custom sur la plage demandée
+    const includesMap = new Map(); // scheduleId -> Set(dateISO)
+    const excludesMap = new Map(); // scheduleId -> Set(dateISO)
+    if(scheduleIds.length){
+      const nowRef = new Date();
+      const wantedDates = [];
+      for(let i=0;i<daysParam;i++){ const d=new Date(nowRef); d.setDate(nowRef.getDate()+i); wantedDates.push(formatISODate(d)); }
+      if(wantedDates.length){
+        const idPh = scheduleIds.map(()=>'?').join(',');
+        const datePh = wantedDates.map(()=>'?').join(',');
+        const incRows = await scheduleQuery(`SELECT schedule_id, DATE_FORMAT(date,'%Y-%m-%d') AS date FROM schedule_custom_include WHERE schedule_id IN (${idPh}) AND date IN (${datePh})`, [...scheduleIds, ...wantedDates]);
+        for(const r of incRows){ if(!includesMap.has(r.schedule_id)) includesMap.set(r.schedule_id, new Set()); includesMap.get(r.schedule_id).add(r.date); }
+        const excRows = await scheduleQuery(`SELECT schedule_id, DATE_FORMAT(date,'%Y-%m-%d') AS date FROM schedule_custom_exclude WHERE schedule_id IN (${idPh}) AND date IN (${datePh})`, [...scheduleIds, ...wantedDates]);
+        for(const r of excRows){ if(!excludesMap.has(r.schedule_id)) excludesMap.set(r.schedule_id, new Set()); excludesMap.get(r.schedule_id).add(r.date); }
+      }
+    }
+    function runsOnDay(r, date){
+      if(!r) return false;
+      const inc = includesMap.get(r.id);
+      if(inc && inc.has(date)) return true; // inclusion explicite
+      const exc = excludesMap.get(r.id);
+      if(exc && exc.has(date)) return false; // exclusion explicite
+      if(r.flag_custom){ return inc? inc.has(date): false; } // mode custom: uniquement dates incluses
+      return bitRuns(r.days_mask, date);
+    }
+
     const stopsRows = scheduleIds.length? await scheduleQuery(
       `SELECT st.schedule_id, st.stop_order, st.station_id FROM schedule_stops st WHERE st.schedule_id IN (${scheduleIds.map(()=>'?').join(',')}) ORDER BY st.schedule_id, st.stop_order`,
       scheduleIds
@@ -227,7 +267,8 @@ export async function GET(req, ctx){
 
       const list = rows
         .map(r=>{
-          const base = { id:r.id, ligne_id: r.ligne_id, time:r.time, origin:r.origin_name, destination:r.dest_name, train_type:r.train_type, train_number:r.train_number||'', platform:r.platform||null, delay_min:null, delay_cause:null, cancelled:false, rerouted:false };
+          if(!runsOnDay(r, date)) return null; // filtrage jours de circulation
+          const base = { id:r.id, ligne_id: r.ligne_id, time:r.time, origin:r.origin_name, destination:r.dest_name, train_type:r.train_type, train_number:r.train_number||'', platform:r.platform||null, delay_min:null, delay_cause:null, cancelled:false, rerouted:false, days_mask: r.days_mask };
 
           // Filtrage perturbations: exclusion de sillons sélectionnés
           const perts = pertsByLine.get(r.ligne_id)||[];

@@ -174,10 +174,54 @@ export default function CreationPerturbationLigne() {
   return (
     <div>
       <h1>Créer une perturbation sur une ligne</h1>
-      <div className="mb-4">
-        {ETAPES.map((et, idx) => (
-          <span key={et} className={"me-3 " + (step === idx ? "fw-bold text-primary" : "text-muted")}>{et}</span>
-        ))}
+      {/* Stepper React custom, remplace le WCS */}
+      <div className="sncf-stepper mb-4">
+        <ol className="sncf-stepper-list d-flex flex-row list-unstyled p-0 m-0">
+          {ETAPES.map((etape, idx) => (
+            <li key={etape} className={
+              'sncf-stepper-step flex-fill text-center ' +
+              (idx < step ? 'completed' : idx === step ? 'active' : 'upcoming')
+            }>
+              <div className="sncf-stepper-circle mx-auto mb-1">
+                {idx < step ? <span>&#10003;</span> : idx + 1}
+              </div>
+              <div className="sncf-stepper-label small">{etape}</div>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <style jsx>{`
+        .sncf-stepper-list { counter-reset: step; }
+        .sncf-stepper-step { position: relative; }
+        .sncf-stepper-circle {
+          width: 2.2em; height: 2.2em; border-radius: 50%;
+          background: #e9ecef; color: #6c757d; display: flex; align-items: center; justify-content: center;
+          font-weight: bold; font-size: 1.1em; border: 2px solid #e9ecef;
+        }
+        .sncf-stepper-step.active .sncf-stepper-circle {
+          background: #0070f3; color: #fff; border-color: #0070f3;
+        }
+        .sncf-stepper-step.completed .sncf-stepper-circle {
+          background: #43a047; color: #fff; border-color: #43a047;
+        }
+        .sncf-stepper-step:not(:last-child)::after {
+          content: '';
+          position: absolute; top: 50%; right: -50%; left: 50%; height: 4px;
+          background: #e9ecef; z-index: 0; transform: translateY(-50%);
+        }
+        .sncf-stepper-step.completed:not(:last-child)::after {
+          background: #43a047;
+        }
+        .sncf-stepper-step.active .sncf-stepper-label {
+          color: #0070f3;
+        }
+        .sncf-stepper-step.completed .sncf-stepper-label {
+          color: #43a047;
+        }
+      `}</style>
+      <div className="mb-4 d-flex gap-2">
+        <button type="button" className="btn btn-outline-secondary" onClick={prevStep} disabled={step === 0}>Previous</button>
+        <button type="button" className="btn btn-outline-primary" onClick={nextStep} disabled={((form.type !== "travaux" && step >= 3) || (form.type === "travaux" && step >= 5))}>Next</button>
       </div>
       <form onSubmit={handleSubmit}>
         {step === 0 && (

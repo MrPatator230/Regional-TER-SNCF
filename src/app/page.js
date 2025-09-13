@@ -241,14 +241,6 @@ export default function Home() {
   const [stationResolved, setStationResolved] = useState({}); // name -> { id, loading, error }
   const [boards, setBoards] = useState({}); // stationId -> { loading, error, schedules: [] }
 
-  const addMinutesLocal = (hhmm, mins) => {
-    if(!hhmm || typeof mins !== 'number') return hhmm;
-    const [h,m] = hhmm.split(':').map(n=>parseInt(n,10));
-    if(isNaN(h)||isNaN(m)) return hhmm;
-    const d = new Date(); d.setHours(h,m,0,0); d.setMinutes(d.getMinutes()+mins);
-    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  };
-
   // Résolution ID gare
   useEffect(()=> {
     const choice = stationChoices[depStationIdx];
@@ -282,13 +274,15 @@ export default function Home() {
         const now = new Date();
         const today = now.toISOString().slice(0,10);
         const currentTime = now.toTimeString().slice(0,5);
-        const days = j.days||[];
-        // Ne garder que les départs du jour courant et à venir
+        const days = (j.days||[]);
         const todayDay = days.find(d=> d.date===today);
         let list = [];
         if(todayDay){
+          const dObj = new Date(todayDay.date+"T00:00:00");
+          const idx = (dObj.getDay()+6)%7; // lundi=0
           const schedules = todayDay.schedules||[];
           list = schedules
+            .filter(s=> !s.days_mask || ((s.days_mask & (1<<idx))!==0))
             .filter(s=> (s.time||'') >= currentTime)
             .slice(0,5)
             .map(s=> ({ ...s, __platform: platformForStation(s, stationName) || '-' }));
@@ -688,3 +682,14 @@ export default function Home() {
       </>
   );
 }
+
+const addMinutesLocal = (hhmm, mins) => {
+  if(!hhmm || typeof mins !== 'number') return hhmm;
+  const m = String(hhmm).match(/^([0-1]\d|2[0-3]):([0-5]\d)$/);
+  if(!m) return hhmm;
+  let total = parseInt(m[1],10)*60 + parseInt(m[2],10) + mins;
+  total = ((total % 1440) + 1440) % 1440; // wrap 24h
+  const H = String(Math.floor(total/60)).padStart(2,'0');
+  const M = String(total%60).padStart(2,'0');
+  return `${H}:${M}`;
+};

@@ -51,6 +51,17 @@ export default function BoardPage(){
         if(res.status===410){ if(!aborted) { setError('Sillons en refonte — horaires indisponibles'); setData(null); } return; }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
+        // Filtrage client supplémentaire (sécurité) sur days_mask
+        const filteredDays = (json.days||[]).map(day => {
+          const runs = (s)=> {
+            if(s.days_mask==null) return true; // si absent, on conserve
+            const d = new Date(day.date+"T00:00:00"); if(isNaN(d)) return true;
+            const idx = (d.getDay()+6)%7; // lundi=0
+            return (s.days_mask & (1<<idx)) !== 0;
+          };
+            return { ...day, schedules: (day.schedules||[]).filter(runs) };
+        });
+        json.days = filteredDays;
         if (!aborted) setData(json);
       } catch (e) {
         if (!aborted) setError("Impossible de charger les horaires.");
@@ -119,7 +130,8 @@ export default function BoardPage(){
             original_destination: sched.original_destination,
             original_origin: sched.original_origin,
             new_destination: sched.destination,
-            new_origin: sched.origin
+            new_origin: sched.origin,
+            schedule_departure_time: (stops[0]?.departure_time || stops[0]?.time || null) // heure départ origine
           };
           setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj }}));
           // Mémorise la voie pour la gare courante si disponible
@@ -159,7 +171,8 @@ export default function BoardPage(){
                 stops: stops2,
                 delay_min: sched.delay_min || null,
                 delay_cause: sched.delay_cause || null,
-                cancelled: !!sched.cancelled
+                cancelled: !!sched.cancelled,
+                schedule_departure_time: (stops2[0]?.departure_time || stops2[0]?.time || null)
               };
               setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj2 }}));
               const currentStop2 = stops2.find(st => normalizeStation(st.station_name||'') === normalizeStation(from||''));
@@ -201,7 +214,8 @@ export default function BoardPage(){
                 stops: stops2,
                 delay_min: sched.delay_min || null,
                 delay_cause: sched.delay_cause || null,
-                cancelled: !!sched.cancelled
+                cancelled: !!sched.cancelled,
+                schedule_departure_time: (stops2[0]?.departure_time || stops2[0]?.time || null)
               };
               setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj2 }}));
               const currentStop2 = stops2.find(st => normalizeStation(st.station_name||'') === normalizeStation(from||''));
@@ -258,7 +272,8 @@ export default function BoardPage(){
             stops: finalStops,
             delay_min: sched.delay_min || null,
             delay_cause: sched.delay_cause || null,
-            cancelled: !!sched.cancelled
+            cancelled: !!sched.cancelled,
+            schedule_departure_time: (finalStops[0]?.departure_time || finalStops[0]?.time || null)
         };
         setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj }}));
         // Mémorise la voie pour la gare courante si disponible
@@ -290,7 +305,8 @@ export default function BoardPage(){
               stops: stops2,
               delay_min: sched.delay_min || null,
               delay_cause: sched.delay_cause || null,
-              cancelled: !!sched.cancelled
+              cancelled: !!sched.cancelled,
+              schedule_departure_time: (stops2[0]?.departure_time || stops2[0]?.time || null)
             };
             setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj2 }}));
             const currentStop2 = stops2.find(st => normalizeStation(st.station_name||'') === normalizeStation(stationName||''));
@@ -440,6 +456,7 @@ export default function BoardPage(){
       return a; // stable
     };
 
+    const filteredSchedules = {};
     schedules.forEach((sched) => {
       const trainNumber = sched.train_number;
       const dayDate = sched.day_date; // Assurez-vous que cette propriété existe dans les données
@@ -512,6 +529,8 @@ export default function BoardPage(){
                     )}
                     {visibleSchedules.map(s => {
                       const compoundId = `${day.date}::${s.id}`;
+                      // Utiliser explicitement departure_time du premier arrêt (stops[0]) si disponible
+                      const displayTime = s.stops?.[0]?.departure_time || s.time;
                       const isOpen = openId === compoundId;
                       const infoText = details[compoundId]?.schedule?.info || s.info || '';
                       // Perturbations filtrées pour ce sillon, selon sa ligne/heure/date
@@ -547,14 +566,14 @@ export default function BoardPage(){
                           >
                             <div className="col time" role="cell">
                               {s.cancelled ? (
-                                <span className="time-base strike cancelled-text">{s.time}</span>
+                                <span className="time-base strike cancelled-text">{displayTime}</span>
                               ) : s.delay_min ? (
                                 <div className="dual-time">
-                                  <span className="t-orig strike" aria-label="Heure prévue initiale">{s.time}</span>
-                                  <span className="t-new" aria-label={`Heure estimée avec retard ${s.delay_min} minutes`}>{addMinutes(s.time, s.delay_min)}</span>
+                                  <span className="t-orig strike" aria-label="Heure prévue initiale">{displayTime}</span>
+                                  <span className="t-new" aria-label={`Heure estimée avec retard ${s.delay_min} minutes`}>{addMinutes(displayTime, s.delay_min)}</span>
                                 </div>
                               ) : (
-                                <span className="time-base">{s.time}</span>
+                                <span className="time-base">{displayTime}</span>
                               )}
                               {disruptionFlags.map(f => (
                                 <span key={f.type} className={`flag flag-${f.type}`} aria-label={f.aria}>{f.text}</span>
@@ -610,7 +629,9 @@ export default function BoardPage(){
                               )}
                             </div>
                             <div className="col voie" role="cell">
-                              <span className={"platform" + (s.cancelled ? " cancelled-text strike" : "")}>{boardPlatform}</span>
+                              <span className={"platform" + (s.cancelled ? " cancelled-text strike" : "")}>
+                                {boardPlatform}
+                              </span>
                             </div>
                             <div className="col fav" role="cell">
                               <wcs-button
@@ -729,16 +750,71 @@ export default function BoardPage(){
                                 let listStops = slicedStops.slice();
                                 const oriInListIdx = findStationIndex(listStops, originLabel);
                                 const dstInListIdx = findStationIndex(listStops, destLabel);
-                                const originDisplayTime = (slicedStops[firstActiveIdx]?.departure_time || slicedStops[firstActiveIdx]?.time || '-');
-                                const destDisplayTime = (slicedStops[lastActiveIdx]?.arrival_time || slicedStops[lastActiveIdx]?.time || '-');
-                                const originDisplayPlatform = (slicedStops[firstActiveIdx]?.platform ?? null);
-                                const destDisplayPlatform = (slicedStops[lastActiveIdx]?.platform ?? null);
+                                const boardNorm = normalizeStation(data?.station?.name || '');
+                                // Heures pour endpoints (conservent la logique existante)
+                                const originIdxFullReal = findStationIndex(slicedStops, originLabel);
+                                const destIdxFullReal = findStationIndex(slicedStops, destLabel);
+                                const originDisplayTime = (
+                                  originIdxFullReal >= 0
+                                    ? (slicedStops[originIdxFullReal].departure_time || slicedStops[originIdxFullReal].time)
+                                    : (slicedStops[firstActiveIdx]?.departure_time || slicedStops[firstActiveIdx]?.time)
+                                ) || '-';
+                                const destDisplayTime = (
+                                  destIdxFullReal >= 0
+                                    ? (slicedStops[destIdxFullReal].arrival_time || slicedStops[destIdxFullReal].time)
+                                    : (slicedStops[lastActiveIdx]?.arrival_time || slicedStops[lastActiveIdx]?.time)
+                                ) || '-';
+                                const originDisplayPlatform = (originIdxFullReal>=0 ? (slicedStops[originIdxFullReal]?.platform ?? null) : (slicedStops[firstActiveIdx]?.platform ?? null));
+                                const destDisplayPlatform = (destIdxFullReal>=0 ? (slicedStops[destIdxFullReal]?.platform ?? null) : (slicedStops[lastActiveIdx]?.platform ?? null));
+                                // Nouvelle logique: si l'origine fournie par l'API est exactement la gare du tableau mais que le premier arrêt réel est une autre gare (train arrive d'abord),
+                                // alors on considère ce premier arrêt réel comme véritable origine pour l'affichage (évite heure dupliquée/mauvaise sur la gare courante).
+                                let originLabelDisplay = originLabel;
+                                if(
+                                  normalizeStation(originLabel) === boardNorm &&
+                                  slicedStops.length &&
+                                  normalizeStation(slicedStops[0].station_name) !== boardNorm &&
+                                  // le board station apparaît plus loin dans la liste ou pas du tout
+                                  true
+                                ){
+                                  originLabelDisplay = slicedStops[0].station_name;
+                                }
+                                // Si l'origine n'est pas présente et ne correspond pas au cas ci-dessus on ne crée plus de ligne synthétique avec une heure erronée.
                                 if(originLabel && oriInListIdx === -1){
-                                  listStops.unshift({ station_name: originLabel, time: originDisplayTime, departure_time: originDisplayTime, platform: originDisplayPlatform, synthetic:true });
+                                  const needSynthetic = (
+                                    // garder éventuellement la synthèse seulement si l'origine est différente de la gare du tableau ET n'est pas déjà le premier arrêt
+                                    normalizeStation(originLabel) !== boardNorm &&
+                                    (!slicedStops.length || normalizeStation(slicedStops[0].station_name) !== normalizeStation(originLabel))
+                                  );
+                                  if(needSynthetic){
+                                    const originScheduleDeparture = (schedDet?.schedule_departure_time || s?.schedule_departure_time || originDisplayTime);
+                                    listStops.unshift({ station_name: originLabel, time: originScheduleDeparture || originDisplayTime, departure_time: originScheduleDeparture || originDisplayTime, platform: originDisplayPlatform, synthetic:true, from_schedule:true });
+                                  } else {
+                                    // On évite d'ajouter une fausse origine; on réaffiche via originLabelDisplay
+                                  }
                                 }
-                                if(destLabel && dstInListIdx === -1){
-                                  listStops.push({ station_name: destLabel, time: destDisplayTime, arrival_time: destDisplayTime, platform: destDisplayPlatform, synthetic:true });
-                                }
+                                // Ajout forcé de la gare d'origine du sillon si elle est absente de la liste.
+                                // On priorise l'origine fournie par l'API (originLabel), sinon le premier arrêt réel du sillon.
+                                (function ensureOriginListed(){
+                                  // Ne pas utiliser schedDet ici (n'existe pas dans ce scope). Utilise seulement les données "s" et originDisplayTime.
+                                  const originName = originLabel || s.original_origin || s.origin || null;
+                                  const originNorm = normalizeStation(originName || '');
+                                  const already = originNorm && listStops.some(st => normalizeStation(st.station_name) === originNorm);
+                                  if(originName && !already){
+                                    // Déduire l'heure de départ depuis le sillon (préférence) ou depuis le premier arrêt connu
+                                    const originScheduleDeparture = s?.schedule_departure_time || (slicedStops[0]?.departure_time || slicedStops[0]?.time) || originDisplayTime || null;
+                                    listStops.unshift({ station_name: originName, time: originScheduleDeparture || originDisplayTime, departure_time: originScheduleDeparture || originDisplayTime, platform: originDisplayPlatform || null, synthetic:true, from_schedule:true });
+                                    return;
+                                  }
+                                  // En dernier recours, si aucune origine déclarée mais un premier arrêt réel différent de la gare du tableau, l'ajouter
+                                  const earliestStop = [...slicedStops].find(st => st && !st.removed) || null;
+                                  const earliestNameNorm = normalizeStation(earliestStop?.station_name || '');
+                                  const boardNameNorm = normalizeStation(data?.station?.name || '');
+                                  const earliestAlready = earliestNameNorm && listStops.some(st=> normalizeStation(st.station_name)===earliestNameNorm);
+                                  if(earliestStop && !earliestAlready && earliestNameNorm && earliestNameNorm !== boardNameNorm){
+                                    const originScheduleDeparture = s?.schedule_departure_time || (earliestStop.departure_time || earliestStop.time) || originDisplayTime;
+                                    listStops.unshift({ station_name: earliestStop.station_name, time: originScheduleDeparture || '-', departure_time: originScheduleDeparture || '-', platform: earliestStop.platform||null, synthetic:true, forced_origin:true });
+                                  }
+                                })();
                                 return (
                                   <div className="details-content">
                                     {/* Affichage du bandeau Information en une ligne (icône + texte) uniquement */}
@@ -780,7 +856,7 @@ export default function BoardPage(){
                                             const isRemoved = !!st.removed;
                                             const isCancelledStop = !!st.cancelled;
                                             const isCurrent = (normalizeStation(st.station_name) === normalizeStation(data?.station?.name || ''));
-                                            const isOriginRow = normalizeStation(st.station_name) === normalizeStation(originLabel);
+                                            const isOriginRow = normalizeStation(st.station_name) === normalizeStation(originLabelDisplay);
                                             const isDestRow = normalizeStation(st.station_name) === normalizeStation(destLabel);
                                             const isOriginBadge = !isRemoved && isOriginRow;
                                             const isTerminusBadge = !isRemoved && isDestRow;
@@ -804,7 +880,12 @@ export default function BoardPage(){
                                             let arrBase = null, depBase = null;
                                             if (isOriginRow) {
                                               arrBase = null;
-                                              depBase = st.departure_time || st.time || null;
+                                              // Utilise en priorité l'heure du sillon (s.time) si la gare d'origine est la gare du tableau
+                                              if(normalizeStation(originLabelDisplay) === normalizeStation(data?.station?.name||'') && s.time){
+                                                depBase = s.time;
+                                              } else {
+                                                depBase = st.departure_time || st.time || null;
+                                              }
                                             } else if (isDestRow) {
                                               arrBase = st.arrival_time || st.time || null;
                                               depBase = null;
@@ -861,7 +942,7 @@ export default function BoardPage(){
                                         return (
                                           <div className="buy-section" aria-label="Achat">
                                             <h4 className="buy-title">Vous souhaitez acheter un trajet ?</h4>
-                                            <p className="buy-help">Sélectionnez votre gare d'arrivée dans la liste ci-dessus</p>
+                                            <p className="buy-help">Sélectionnez votre gare d&apos;arrivée dans la liste ci-dessus</p>
                                             <div className="buy-form">
                                               <div className="buy-line" role="group" aria-label="Voyageurs et carte">
                                                 <wcs-mat-icon icon="person" aria-hidden="true"></wcs-mat-icon>
@@ -896,260 +977,6 @@ export default function BoardPage(){
                                   </div>
                                 );
                               })()}
-                              {!details[compoundId]?.loading && !details[compoundId]?.schedule && (
-                                <div className="details-content">
-                                  <section className="stops-section">
-                                    <h3>Liste des gares</h3>
-                                    <p className="subtitle">desservies par le train {formatTrainType(s.train_type)} {s.train_number || ''}</p>
-                                    <p className="operator">Opéré par SNCF Voyageurs</p>
-                                    {(() => {
-                                      // Construit dynamiquement les arrêts depuis le sillon inclus dans l'objet s
-                                      let displayStops = [];
-                                      // Prépare une liste de stops courants si reroute fourni côté board
-                                      if (s.reroute && Array.isArray(s.reroute.stops) && s.reroute.stops.length) {
-                                        const currentStops = s.reroute.stops.map(st => ({
-                                          station_name: st.station || st.station_name || '',
-                                          time: st.departure || st.arrival || '',
-                                          arrival_time: st.arrival || '',
-                                          departure_time: st.departure || '',
-                                          platform: st.platform || st.voie || st.track || st.platform_code || null
-                                        }));
-                                        // Si itinéraire original détaillé fourni: fusion pour marquer les arrêts supprimés
-                                        if (s.rerouted && Array.isArray(s.original_stops_detailed) && s.original_stops_detailed.length) {
-                                          const newMap = new Map();
-                                          currentStops.forEach(st => { if (st.station_name) newMap.set((st.station_name + '').toLowerCase(), st); });
-                                          displayStops = s.original_stops_detailed.map(os => {
-                                            const key = (os.station_name || '').toLowerCase();
-                                            const match = newMap.get(key);
-                                            if (match) {
-                                              return { ...match, removed: false };
-                                            }
-                                            return {
-                                              station_name: os.station_name,
-                                              arrival_time: os.arrival_time,
-                                              departure_time: os.departure_time,
-                                              time: os.departure_time || os.arrival_time || null,
-                                              platform: os.platform || os.voie || os.track || os.platform_code || null,
-                                              removed: true
-                                            };
-                                          });
-                                        } else {
-                                          displayStops = currentStops;
-                                        }
-                                      } else if (Array.isArray(s.original_stops_detailed) && s.original_stops_detailed.length) {
-                                        // Utilise l'itinéraire original détaillé si disponible
-                                        displayStops = s.original_stops_detailed.map(os => ({
-                                          station_name: os.station_name,
-                                          arrival_time: os.arrival_time,
-                                          departure_time: os.departure_time,
-                                          time: os.departure_time || os.arrival_time || null,
-                                          platform: os.platform || os.voie || os.track || os.platform_code || null
-                                        }));
-                                      } else if (Array.isArray(s.stops) && s.stops.length) {
-                                        // Dernier recours: stops simples si présents
-                                        displayStops = s.stops.map(st => ({
-                                          station_name: st.station || st.station_name || '',
-                                          time: st.time || st.departure || st.arrival || null,
-                                          arrival_time: st.arrival || null,
-                                          departure_time: st.departure || null,
-                                          platform: st.platform || st.voie || st.track || st.platform_code || null
-                                        }));
-                                      }
-
-                                      // Si train supprimé: affiche l'itinéraire (original si dispo) barré
-                                      if (s.cancelled) {
-                                        const base = Array.isArray(s.original_stops_detailed) && s.original_stops_detailed.length ? s.original_stops_detailed : displayStops;
-                                        displayStops = base.map(os => ({
-                                          station_name: os.station_name,
-                                          arrival_time: os.arrival_time,
-                                          departure_time: os.departure_time,
-                                          time: os.time || os.departure_time || os.arrival_time || null,
-                                          platform: os.platform || os.voie || os.track || os.platform_code || null,
-                                          removed: true,
-                                          cancelled: true
-                                        }));
-                                      }
-
-                                      // Forcer la plage entre l'origine et le terminus du sillon (préférence au reroute)
-                                      const originPref = s.new_origin || s.original_origin || s.origin || (displayStops[0]?.station_name || '');
-                                      const destPref = s.new_destination || s.original_destination || s.destination || (displayStops[displayStops.length-1]?.station_name || '');
-                                      const oIdxFull = findStationIndex(displayStops, originPref);
-                                      const dIdxFull = findStationIndex(displayStops, destPref);
-                                      let rangeStops = displayStops;
-                                      if(oIdxFull>=0 && dIdxFull>=0 && oIdxFull<=dIdxFull){
-                                        rangeStops = displayStops.slice(oIdxFull, dIdxFull+1);
-                                      }
-
-                                      // Découpe: en DEPARTS on garde TOUT (entre origine->terminus), en ARRIVEES on coupe jusqu'à la gare du tableau incluse
-                                      const boardStation = (data?.station?.name || '');
-                                      const boardKey = normalizeStation(boardStation);
-                                      const idxInRange = rangeStops.findIndex(st => normalizeStation(st.station_name) === boardKey);
-                                      let slicedStops = rangeStops;
-                                      // Ancien découpage en mode "arrivals" supprimé pour conserver le terminus
-                                      // if (idxInRange >= 0) {
-                                      //   if (type === 'departures') {
-                                      //     slicedStops = rangeStops; // pas de découpe
-                                      //   } else {
-                                      //     slicedStops = rangeStops.slice(0, idxInRange + 1);
-                                      //   }
-                                      // }
-
-                                      const firstActiveIdx = (()=>{ const i = slicedStops.findIndex(s => !s.removed); return i>=0? i : 0; })();
-                                      const lastActiveIdx = (()=>{ const i = [...slicedStops].reverse().findIndex(s => !s.removed); return i>=0? (slicedStops.length-1-i) : (slicedStops.length-1); })();
-                                      const { originLabel, destLabel, originWasChanged, destWasChanged } = getEndpointLabels(null, s);
-                                      // Liste finale avec endpoints visibles
-                                      let listStops = slicedStops.slice();
-                                      const oriInListIdx = findStationIndex(listStops, originLabel);
-                                      const dstInListIdx = findStationIndex(listStops, destLabel);
-                                      const originDisplayTime = (slicedStops[firstActiveIdx]?.departure_time || slicedStops[firstActiveIdx]?.time || '-');
-                                      const destDisplayTime = (slicedStops[lastActiveIdx]?.arrival_time || slicedStops[lastActiveIdx]?.time || '-');
-                                      const originDisplayPlatform = (slicedStops[firstActiveIdx]?.platform ?? null);
-                                      const destDisplayPlatform = (slicedStops[lastActiveIdx]?.platform ?? null);
-                                      if(originLabel && oriInListIdx === -1){
-                                        listStops.unshift({ station_name: originLabel, time: originDisplayTime, departure_time: originDisplayTime, platform: originDisplayPlatform, synthetic:true });
-                                      }
-                                      if(destLabel && dstInListIdx === -1){
-                                        listStops.push({ station_name: destLabel, time: destDisplayTime, arrival_time: destDisplayTime, platform: destDisplayPlatform, synthetic:true });
-                                      }
-
-                                      return (
-                                        <>
-                                          <div className="route-summary" role="group" aria-label="Origine et destination">
-                                            <div className="rs-item"><span className="rs-label">Provenance</span><span className={"rs-value" + (originWasChanged? ' changed':'')}>{originLabel || '-'}</span></div>
-                                            <div className="rs-item"><span className="rs-label">Destination</span><span className={"rs-value" + (destWasChanged? ' changed':'')}>{destLabel || '-'}</span></div>
-                                          </div>
-                                          <div className="stops-table" role="table">
-                                            <div className="stops-head" role="rowgroup">
-                                              <div className="stops-row head" role="row">
-                                                <div className="st-col arr" role="columnheader">Arrivée</div>
-                                                <div className="st-col dep" role="columnheader">Départ</div>
-                                                <div className="st-col name" role="columnheader">Gare</div>
-                                                <div className="st-col voie" role="columnheader">Voie</div>
-                                              </div>
-                                            </div>
-                                            <div className="stops-body" role="rowgroup">
-                                              {listStops.map((st, idx) => {
-                                                const isRemoved = !!st.removed;
-                                                const isCancelledStop = !!st.cancelled;
-                                                const isCurrent = (normalizeStation(st.station_name) === normalizeStation(data?.station?.name || ''));
-                                                const isOriginRow = normalizeStation(st.station_name) === normalizeStation(originLabel);
-                                                const isDestRow = normalizeStation(st.station_name) === normalizeStation(destLabel);
-                                                const isOriginBadge = !isRemoved && isOriginRow;
-                                                const isTerminusBadge = !isRemoved && isDestRow;
-                                                // Sélection arrivée
-                                                const boardListIdx = listStops.findIndex(x => normalizeStation(x.station_name) === boardKey);
-                                                const selectable = !isRemoved && !isCancelledStop && idx > boardListIdx;
-                                                const selectedName = selectedArrivalMap[s.id] || null;
-                                                const isSelected = selectable && selectedName && normalizeStation(selectedName) === normalizeStation(st.station_name);
-                                                const rowClasses = [
-                                                  'stops-row',
-                                                  isRemoved ? 'removed' : '',
-                                                  isCancelledStop ? 'cancelled' : '',
-                                                  idx === 0 ? 'first' : '',
-                                                  isSelected ? 'selected' : ''
-                                                ].filter(Boolean).join(' ');
-                                                const handleClick = (e)=>{ e.stopPropagation(); if(!selectable) return; setSelectedArrivalMap(m=> ({...m, [s.id]: st.station_name})); };
-                                                // Correction ici : schedDet est bien dans le scope
-                                                const delayMin = (typeof schedDet?.delay_min === 'number' ? schedDet.delay_min : (typeof s?.delay_min === 'number' ? s.delay_min : null));
-                                                const showDelayed = !!delayMin && !isRemoved && !isCancelledStop;
-                                                // Correction affichage arrivée/départ pour origine/terminus
-                                                let arrBase = null, depBase = null;
-                                                if (isOriginRow) {
-                                                  arrBase = null;
-                                                  depBase = st.departure_time || st.time || null;
-                                                } else if (isDestRow) {
-                                                  arrBase = st.arrival_time || st.time || null;
-                                                  depBase = null;
-                                                } else {
-                                                  arrBase = st.arrival_time || null;
-                                                  depBase = st.departure_time || null;
-                                                }
-                                                return (
-                                                  <div key={(st.station_name||'') + '#' + idx} className={rowClasses} role="row" onClick={handleClick}>
-                                                    <div className="st-col arr" role="cell">
-                                                      {arrBase ? (
-                                                        showDelayed && !isOriginRow && !isDestRow ? (
-                                                          <div className="dual-time small">
-                                                            <span className="t-orig strike">{arrBase}</span>
-                                                            <span className="t-new">{addMinutes(arrBase, delayMin)}</span>
-                                                          </div>
-                                                        ) : (
-                                                          <span className={isRemoved ? 'removed-time strike' : ''}>{arrBase}</span>
-                                                        )
-                                                      ) : <span className={isRemoved ? 'removed-time strike' : ''}>-</span>}
-                                                    </div>
-                                                    <div className="st-col dep" role="cell">
-                                                      {depBase ? (
-                                                        showDelayed && !isOriginRow && !isDestRow ? (
-                                                          <div className="dual-time small">
-                                                            <span className="t-orig strike">{depBase}</span>
-                                                            <span className="t-new">{addMinutes(depBase, delayMin)}</span>
-                                                          </div>
-                                                        ) : (
-                                                          <span className={isRemoved ? 'removed-time strike' : ''}>{depBase}</span>
-                                                        )
-                                                      ) : <span className={isRemoved ? 'removed-time strike' : ''}>-</span>}
-                                                    </div>
-                                                    <div className="st-col name" role="cell">
-                                                      <span className={isRemoved ? 'removed-name' : ''}>{st.station_name}</span>
-                                                      {isCurrent && <span className="stop-badge here" aria-hidden="true">Ici</span>}
-                                                      {!isRemoved && isOriginBadge && <span className="stop-badge origin" aria-hidden="true">Départ</span>}
-                                                      {!isRemoved && isTerminusBadge && <span className="stop-badge terminus" aria-hidden="true">Terminus</span>}
-                                                    </div>
-                                                    <div className="st-col voie" role="cell">{(isCurrent && (platformsBySchedule[s.id] || platformForStation(s, data?.station?.name || ''))) || st.platform || '-'}</div>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                          {/* Bloc réservation */}
-                                          {(!s.cancelled) && (()=>{
-                                            const f = getForm(s.id);
-                                            const pax = Math.max(1, parseInt(f.passengers||1,10));
-                                            const cardMap = { none:'Sans carte', jeune:'Carte Jeune', senior:'Carte Senior', weekend:'Carte Week-end' };
-                                            const cardLbl = cardMap[f.card] || 'Sans carte';
-                                            const arrivalChosen = !!selectedArrivalMap[s.id];
-                                            const toggleEdit = ()=> updateForm(s.id, { editing: !f.editing });
-                                            return (
-                                              <div className="buy-section" aria-label="Achat">
-                                                <h4 className="buy-title">Vous souhaitez acheter un trajet ?</h4>
-                                                <p className="buy-help">Sélectionnez votre gare d'arrivée dans la liste ci-dessus</p>
-                                                <div className="buy-form">
-                                                  <div className="buy-line" role="group" aria-label="Voyageurs et carte">
-                                                    <wcs-mat-icon icon="person" aria-hidden="true"></wcs-mat-icon>
-                                                    <div className="sum-meta">{pax} voyageur{pax>1?'s':''}, {cardLbl}</div>
-                                                    <wcs-button size="s" shape="round" mode="clear" aria-label="Modifier voyageurs et carte" onClick={e=>{ e.preventDefault(); e.stopPropagation(); toggleEdit(); }}>
-                                                      <wcs-mat-icon icon="edit"></wcs-mat-icon>
-                                                    </wcs-button>
-                                                  </div>
-                                                  {f.editing && (
-                                                    <div className="buy-line" role="group" aria-label="Edition voyageurs et carte">
-                                                      <label style={{fontSize:'.8rem'}}>Voyageurs
-                                                        <input type="number" min={1} max={8} value={pax} onChange={e=> updateForm(s.id,{ passengers: Math.max(1, Math.min(8, parseInt(e.target.value||'1',10))) })} />
-                                                      </label>
-                                                      <label style={{fontSize:'.8rem'}}>Carte
-                                                        <select value={f.card||'none'} onChange={e=> updateForm(s.id,{ card:e.target.value })}>
-                                                          <option value="none">Sans carte</option>
-                                                          <option value="jeune">Carte Jeune</option>
-                                                          <option value="senior">Carte Senior</option>
-                                                          <option value="weekend">Carte Week-end</option>
-                                                        </select>
-                                                      </label>
-                                                    </div>
-                                                  )}
-                                                  <wcs-button className="buy-btn" onClick={()=> addToCart(s)} disabled={!arrivalChosen || choosing}>
-                                                    Acheter ce trajet
-                                                  </wcs-button>
-                                                </div>
-                                              </div>
-                                            );
-                                          })()}
-                                        </>
-                                      );
-                                    })()}
-                                  </section>
-                                </div>
-                              )}
                             </div>
                           )}
                           </React.Fragment>
@@ -1173,14 +1000,7 @@ export default function BoardPage(){
                 </div>
               )}
             </div>
-          )};
-        {showGoCart && (
-          <div className="go-cart-fab" role="alert">
-            <wcs-button size="s" onClick={()=>router.push('/panier')}>
-              Voir le panier
-            </wcs-button>
-          </div>
-        )}
+          )}
       </main>
       <style jsx>{`
         .board-wrapper { max-width:1250px; margin:0 auto; padding:1rem 1.5rem 3rem; }
@@ -1313,3 +1133,4 @@ export default function BoardPage(){
     </>
   );
 }
+
