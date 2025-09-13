@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { Editor } from '@tinymce/tinymce-react';
 
 const ETAPES = [
@@ -20,7 +20,16 @@ const PERTURB_TYPES = [
 
 const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
-export default function CreationPerturbationLigne() {
+export default function EditionPerturbationLigne() {
+  const router = useRouter();
+  const params = useParams();
+  const id = params?.id;
+
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     type: "travaux",
@@ -37,29 +46,43 @@ export default function CreationPerturbationLigne() {
     substitutions: false,
     sillons_substitution: [],
   });
-  const [saving, setSaving] = useState(false);
+
   const [lignes, setLignes] = useState([]);
   const [loadingLignes, setLoadingLignes] = useState(true);
   const [errorLignes, setErrorLignes] = useState("");
+
   const [sillons, setSillons] = useState([]);
   const [loadingSillons, setLoadingSillons] = useState(false);
   const [errorSillons, setErrorSillons] = useState("");
+
   const [sillonsSub, setSillonsSub] = useState([]);
   const [loadingSillonsSub, setLoadingSillonsSub] = useState(false);
   const [errorSillonsSub, setErrorSillonsSub] = useState("");
-  const router = useRouter();
 
+  const parseDate = useCallback((dt, mode) => {
+    if (!dt) return "";
+    // dt peut être 'YYYY-MM-DD HH:MM:SS' ou ISO
+    const parts = dt.includes('T') ? dt.split('T') : dt.split(' ');
+    if (mode === 'date') return parts[0];
+    if (mode === 'time') {
+      const time = parts[1] || '';
+      return time.slice(0,5); // HH:MM
+    }
+    return dt;
+  }, []);
+
+  // Charger lignes
   useEffect(() => {
     async function fetchLignes() {
       setLoadingLignes(true);
       setErrorLignes("");
       try {
-        const res = await fetch("/api/lignes", { cache: "no-store" });
+        const res = await fetch('/api/lignes', { cache: 'no-store' });
         const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Erreur chargement lignes");
+        if (!res.ok) throw new Error(data?.error || 'Erreur chargement lignes');
         setLignes(data.lignes || []);
       } catch (e) {
-        setErrorLignes(e.message || "Erreur de chargement");
+        setErrorLignes(e.message || 'Erreur de chargement');
       } finally {
         setLoadingLignes(false);
       }
@@ -67,11 +90,54 @@ export default function CreationPerturbationLigne() {
     fetchLignes();
   }, []);
 
+  // Charger la perturbation
   useEffect(() => {
-    // Charger les sillons si on est à l'étape Circulation, que l'impact est coché, et que tout est rempli
+    if (!id) return;
+    async function fetchPerturbation() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const res = await fetch(`/api/perturbations/${id}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Erreur chargement perturbation');
+        const p = data.perturbation || {};
+        let parsedData = {};
+        try { parsedData = p.data ? (typeof p.data === 'string' ? JSON.parse(p.data) : p.data) : {}; } catch { parsedData = {}; }
+
+        const isTravaux = p.type === 'travaux';
+        const horaire = parsedData.horaire_interruption || {};
+
+        setForm(f => ({
+          ...f,
+            type: p.type || 'travaux',
+            ligne_id: String(p.ligne_id || ''),
+            date_debut: parseDate(p.date_debut, 'date'),
+            date_fin: parseDate(p.date_fin, 'date'),
+            heure_debut: isTravaux ? (horaire.debut || parseDate(p.date_debut, 'time') || '') : '',
+            heure_fin: isTravaux ? (horaire.fin || parseDate(p.date_fin, 'time') || '') : '',
+            jours: Array.isArray(parsedData.jours) ? parsedData.jours : [],
+            titre: p.titre || '',
+            contenu: p.description || '',
+            impact_circulation: !!parsedData.exclude_schedules,
+            sillons_impactes: Array.isArray(parsedData.exclude_schedules) ? parsedData.exclude_schedules : [],
+            substitutions: !!parsedData.substitutions,
+            sillons_substitution: Array.isArray(parsedData.substitutions) ? parsedData.substitutions : [],
+        }));
+        setLoaded(true);
+      } catch (e) {
+        setLoadError(e.message || 'Erreur de chargement');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPerturbation();
+  }, [id, parseDate]);
+
+  // Recharger sillons (impact circulation) quand conditions remplies (étape 3)
+  useEffect(() => {
     if (
       step === 3 &&
-      form.type === "travaux" &&
+      form.type === 'travaux' &&
       form.impact_circulation &&
       form.ligne_id &&
       form.date_debut &&
@@ -79,58 +145,44 @@ export default function CreationPerturbationLigne() {
       form.heure_debut &&
       form.heure_fin
     ) {
-      async function fetchSillons() {
-        setLoadingSillons(true);
-        setErrorSillons("");
+      (async () => {
+        setLoadingSillons(true); setErrorSillons('');
         try {
           const res = await fetch(`/api/schedules?ligne_id=${form.ligne_id}`);
           const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || "Erreur chargement sillons");
-          // Filtrer par heure de début/fin
-          const toM = t => { const [H, M] = String(t || '').split(":").map(Number); return (H || 0) * 60 + (M || 0); };
+          if (!res.ok) throw new Error(data?.error || 'Erreur chargement sillons');
+          const toM = t => { const [H,M] = String(t||'').split(':').map(Number); return (H||0)*60 + (M||0); };
           const sM = toM(form.heure_debut), eM = toM(form.heure_fin);
-          const inRange = t => {
-            const m = toM(t);
-            return sM <= eM ? (m >= sM && m <= eM) : (m >= sM || m <= eM);
-          };
+          const inRange = t => { const m = toM(t); return sM <= eM ? (m>=sM && m<=eM) : (m>=sM || m<=eM); };
           const filtered = (Array.isArray(data) ? data : []).filter(s => inRange(s.departure_time || s.departureTime));
           setSillons(filtered);
-        } catch (e) {
-          setErrorSillons(e.message || "Erreur de chargement");
-          setSillons([]);
-        } finally {
-          setLoadingSillons(false);
-        }
-      }
-      fetchSillons();
+        } catch(e) {
+          setErrorSillons(e.message || 'Erreur de chargement'); setSillons([]);
+        } finally { setLoadingSillons(false); }
+      })();
     }
   }, [step, form.type, form.impact_circulation, form.ligne_id, form.date_debut, form.date_fin, form.heure_debut, form.heure_fin]);
 
+  // Recharger sillons substitution (étape 4)
   useEffect(() => {
     if (
       step === 4 &&
-      form.type === "travaux" &&
+      form.type === 'travaux' &&
       form.substitutions &&
       form.ligne_id &&
       form.date_debut &&
       form.date_fin
     ) {
-      async function fetchSillonsSub() {
-        setLoadingSillonsSub(true);
-        setErrorSillonsSub("");
+      (async () => {
+        setLoadingSillonsSub(true); setErrorSillonsSub('');
         try {
           const res = await fetch(`/api/schedules?ligne_id=${form.ligne_id}&is_substitution=1`);
           const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || "Erreur chargement sillons substitution");
+          if (!res.ok) throw new Error(data?.error || 'Erreur chargement sillons substitution');
           setSillonsSub(Array.isArray(data) ? data : []);
-        } catch (e) {
-          setErrorSillonsSub(e.message || "Erreur de chargement");
-          setSillonsSub([]);
-        } finally {
-          setLoadingSillonsSub(false);
-        }
-      }
-      fetchSillonsSub();
+        } catch(e) { setErrorSillonsSub(e.message || 'Erreur de chargement'); setSillonsSub([]); }
+        finally { setLoadingSillonsSub(false); }
+      })();
     }
   }, [step, form.type, form.substitutions, form.ligne_id, form.date_debut, form.date_fin]);
 
@@ -143,7 +195,7 @@ export default function CreationPerturbationLigne() {
     try {
       const payload = {
         type: form.type,
-        ligne_id: form.ligne_id,
+        ligne_id: form.ligne_id, // même si non utilisé côté PATCH pour l'instant
         titre: form.titre,
         description: form.contenu,
         date_debut: form.date_debut ? `${form.date_debut}T${form.heure_debut || '00:00'}` : null,
@@ -155,26 +207,30 @@ export default function CreationPerturbationLigne() {
           substitutions: form.type === 'travaux' && form.substitutions ? form.sillons_substitution : undefined,
         }
       };
-      // Nettoyage des undefined
       Object.keys(payload.data).forEach(k => payload.data[k] === undefined && delete payload.data[k]);
-      const res = await fetch('/api/perturbations', {
-        method: 'POST',
+
+      const res = await fetch(`/api/perturbations/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error((await res.json())?.error || 'Erreur lors de la création');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || 'Erreur lors de la mise à jour');
       setSaving(false);
-      router.push("/espace/admin/perturbations");
-    } catch (e) {
-      alert(e.message || 'Erreur lors de la création');
+      router.push('/espace/admin/perturbations');
+    } catch(e) {
+      alert(e.message || 'Erreur lors de la mise à jour');
       setSaving(false);
     }
   };
 
+  if (loading) return <div>Chargement…</div>;
+  if (loadError) return <div className="text-danger">{loadError}</div>;
+  if (!loaded) return <div>Introuvable</div>;
+
   return (
     <div>
-      <h1>Créer une perturbation sur une ligne</h1>
-      {/* Stepper React custom, remplace le WCS */}
+      <h1>Éditer la perturbation #{id}</h1>
       <div className="sncf-stepper mb-4">
         <ol className="sncf-stepper-list d-flex flex-row list-unstyled p-0 m-0">
           {ETAPES.map((etape, idx) => (
@@ -193,31 +249,13 @@ export default function CreationPerturbationLigne() {
       <style jsx>{`
         .sncf-stepper-list { counter-reset: step; }
         .sncf-stepper-step { position: relative; }
-        .sncf-stepper-circle {
-          width: 2.2em; height: 2.2em; border-radius: 50%;
-          background: #e9ecef; color: #6c757d; display: flex; align-items: center; justify-content: center;
-          font-weight: bold; font-size: 1.1em; border: 2px solid #e9ecef;
-        }
-        .sncf-stepper-step.active .sncf-stepper-circle {
-          background: #0070f3; color: #fff; border-color: #0070f3;
-        }
-        .sncf-stepper-step.completed .sncf-stepper-circle {
-          background: #43a047; color: #fff; border-color: #43a047;
-        }
-        .sncf-stepper-step:not(:last-child)::after {
-          content: '';
-          position: absolute; top: 50%; right: -50%; left: 50%; height: 4px;
-          background: #e9ecef; z-index: 0; transform: translateY(-50%);
-        }
-        .sncf-stepper-step.completed:not(:last-child)::after {
-          background: #43a047;
-        }
-        .sncf-stepper-step.active .sncf-stepper-label {
-          color: #0070f3;
-        }
-        .sncf-stepper-step.completed .sncf-stepper-label {
-          color: #43a047;
-        }
+        .sncf-stepper-circle { width: 2.2em; height: 2.2em; border-radius: 50%; background: #e9ecef; color: #6c757d; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1em; border: 2px solid #e9ecef; }
+        .sncf-stepper-step.active .sncf-stepper-circle { background: #0070f3; color: #fff; border-color: #0070f3; }
+        .sncf-stepper-step.completed .sncf-stepper-circle { background: #43a047; color: #fff; border-color: #43a047; }
+        .sncf-stepper-step:not(:last-child)::after { content: ''; position: absolute; top: 50%; right: -50%; left: 50%; height: 4px; background: #e9ecef; z-index: 0; transform: translateY(-50%); }
+        .sncf-stepper-step.completed:not(:last-child)::after { background: #43a047; }
+        .sncf-stepper-step.active .sncf-stepper-label { color: #0070f3; }
+        .sncf-stepper-step.completed .sncf-stepper-label { color: #43a047; }
       `}</style>
       <div className="mb-4 d-flex gap-2">
         <button type="button" className="btn btn-outline-secondary" onClick={prevStep} disabled={step === 0}>Previous</button>
@@ -261,7 +299,7 @@ export default function CreationPerturbationLigne() {
               <label className="form-label">Date de fin de diffusion</label>
               <input type="date" className="form-control" value={form.date_fin} onChange={e => setForm(f => ({ ...f, date_fin: e.target.value }))} required />
             </div>
-            {form.type === "travaux" && (
+            {form.type === 'travaux' && (
               <>
                 <div className="mb-3">
                   <label className="form-label">Jours de travaux</label>
@@ -282,11 +320,11 @@ export default function CreationPerturbationLigne() {
                 <div className="mb-3 row">
                   <div className="col-md-6">
                     <label className="form-label">Heure de début des travaux</label>
-                    <input type="time" className="form-control" value={form.heure_debut} onChange={e => setForm(f => ({ ...f, heure_debut: e.target.value }))} required={form.type === "travaux"} />
+                    <input type="time" className="form-control" value={form.heure_debut} onChange={e => setForm(f => ({ ...f, heure_debut: e.target.value }))} required={form.type === 'travaux'} />
                   </div>
                   <div className="col-md-6">
                     <label className="form-label">Heure de fin des travaux</label>
-                    <input type="time" className="form-control" value={form.heure_fin} onChange={e => setForm(f => ({ ...f, heure_fin: e.target.value }))} required={form.type === "travaux"} />
+                    <input type="time" className="form-control" value={form.heure_fin} onChange={e => setForm(f => ({ ...f, heure_fin: e.target.value }))} required={form.type === 'travaux'} />
                   </div>
                 </div>
               </>
@@ -298,13 +336,7 @@ export default function CreationPerturbationLigne() {
             <h2 className="h5">Contenu</h2>
             <div className="mb-3">
               <label className="form-label">Titre</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.titre}
-                onChange={e => setForm(f => ({ ...f, titre: e.target.value }))}
-                required
-              />
+              <input type="text" className="form-control" value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))} required />
             </div>
             <div className="mb-3">
               <label className="form-label">Contenu</label>
@@ -327,47 +359,23 @@ export default function CreationPerturbationLigne() {
             </div>
           </div>
         )}
-        {step === 3 && form.type === "travaux" && (
+        {step === 3 && form.type === 'travaux' && (
           <div>
             <h2 className="h5">Circulation</h2>
             <div className="form-check mb-3">
-              <input
-                type="checkbox"
-                className="form-check-input"
-                id="impact-circulation"
-                checked={form.impact_circulation}
-                onChange={e => setForm(f => ({ ...f, impact_circulation: e.target.checked, sillons_impactes: [] }))}
-              />
-              <label className="form-check-label ms-1" htmlFor="impact-circulation">
-                Cette perturbation impacte la circulation sur la ligne
-              </label>
+              <input type="checkbox" className="form-check-input" id="impact-circulation" checked={form.impact_circulation} onChange={e => setForm(f => ({ ...f, impact_circulation: e.target.checked, sillons_impactes: [] }))} />
+              <label className="form-check-label ms-1" htmlFor="impact-circulation">Cette perturbation impacte la circulation sur la ligne</label>
             </div>
             {form.impact_circulation && (
               <div>
-                {loadingSillons ? (
-                  <div>Chargement des sillons…</div>
-                ) : errorSillons ? (
-                  <div className="text-danger">{errorSillons}</div>
-                ) : sillons.length === 0 ? (
-                  <div className="text-muted">Aucun sillon trouvé pour la période et la plage horaire sélectionnées.</div>
-                ) : (
+                {loadingSillons ? <div>Chargement des sillons…</div> : errorSillons ? <div className="text-danger">{errorSillons}</div> : sillons.length === 0 ? <div className="text-muted">Aucun sillon trouvé pour la période et la plage horaire sélectionnées.</div> : (
                   <div>
                     <div className="mb-2">Sélectionnez les sillons qui ne circuleront pas :</div>
                     <div className="list-group">
                       {sillons.map(s => (
                         <label key={s.id} className="list-group-item d-flex align-items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="form-check-input"
-                            checked={form.sillons_impactes.includes(s.id)}
-                            onChange={e => setForm(f => ({
-                              ...f,
-                              sillons_impactes: e.target.checked
-                                ? [...f.sillons_impactes, s.id]
-                                : f.sillons_impactes.filter(id => id !== s.id)
-                            }))}
-                          />
-                          <span>{s.nom || s.name || `Sillon #${s.id}`} ({s.departure_time || s.departureTime})</span>
+                          <input type="checkbox" className="form-check-input" checked={form.sillons_impactes.includes(s.id)} onChange={e => setForm(f => ({ ...f, sillons_impactes: e.target.checked ? [...f.sillons_impactes, s.id] : f.sillons_impactes.filter(id => id !== s.id) }))} />
+                          <span>{`[${s.train_number || ('#'+s.id)}] (${(s.departure_time || s.departureTime || '').slice(0,5)} / ${(s.arrival_time || s.arrivalTime || '').slice(0,5)})`}</span>
                         </label>
                       ))}
                     </div>
@@ -377,47 +385,23 @@ export default function CreationPerturbationLigne() {
             )}
           </div>
         )}
-        {step === 4 && form.type === "travaux" && (
+        {step === 4 && form.type === 'travaux' && (
           <div>
             <h2 className="h5">Substitutions</h2>
             <div className="form-check mb-3">
-              <input
-                type="checkbox"
-                className="form-check-input"
-                id="substitutions"
-                checked={form.substitutions}
-                onChange={e => setForm(f => ({ ...f, substitutions: e.target.checked, sillons_substitution: [] }))}
-              />
-              <label className="form-check-label ms-1" htmlFor="substitutions">
-                Des substitutions sont prévues
-              </label>
+              <input type="checkbox" className="form-check-input" id="substitutions" checked={form.substitutions} onChange={e => setForm(f => ({ ...f, substitutions: e.target.checked, sillons_substitution: [] }))} />
+              <label className="form-check-label ms-1" htmlFor="substitutions">Des substitutions sont prévues</label>
             </div>
             {form.substitutions && (
               <div>
-                {loadingSillonsSub ? (
-                  <div>Chargement des sillons de substitution…</div>
-                ) : errorSillonsSub ? (
-                  <div className="text-danger">{errorSillonsSub}</div>
-                ) : sillonsSub.length === 0 ? (
-                  <div className="text-muted">Aucun sillon de substitution trouvé pour la période sélectionnée.</div>
-                ) : (
+                {loadingSillonsSub ? <div>Chargement des sillons de substitution…</div> : errorSillonsSub ? <div className="text-danger">{errorSillonsSub}</div> : sillonsSub.length === 0 ? <div className="text-muted">Aucun sillon de substitution trouvé pour la période sélectionnée.</div> : (
                   <div>
                     <div className="mb-2">Sélectionnez les sillons de substitution à activer :</div>
                     <div className="list-group">
                       {sillonsSub.map(s => (
                         <label key={s.id} className="list-group-item d-flex align-items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="form-check-input"
-                            checked={form.sillons_substitution.includes(s.id)}
-                            onChange={e => setForm(f => ({
-                              ...f,
-                              sillons_substitution: e.target.checked
-                                ? [...f.sillons_substitution, s.id]
-                                : f.sillons_substitution.filter(id => id !== s.id)
-                            }))}
-                          />
-                          <span>{s.nom || s.name || `Sillon #${s.id}`} ({s.departure_time || s.departureTime})</span>
+                          <input type="checkbox" className="form-check-input" checked={form.sillons_substitution.includes(s.id)} onChange={e => setForm(f => ({ ...f, sillons_substitution: e.target.checked ? [...f.sillons_substitution, s.id] : f.sillons_substitution.filter(id => id !== s.id) }))} />
+                          <span>{`[${s.train_number || ('#'+s.id)}] (${(s.departure_time || s.departureTime || '').slice(0,5)} / ${(s.arrival_time || s.arrivalTime || '').slice(0,5)})`}</span>
                         </label>
                       ))}
                     </div>
@@ -427,7 +411,7 @@ export default function CreationPerturbationLigne() {
             )}
           </div>
         )}
-        {((step === 3 && form.type !== "travaux") || (step === 5 && form.type === "travaux")) && (
+        {((step === 3 && form.type !== 'travaux') || (step === 5 && form.type === 'travaux')) && (
           <div>
             <h2 className="h5">Récapitulatif</h2>
             <ul className="list-group mb-3">
@@ -440,27 +424,23 @@ export default function CreationPerturbationLigne() {
                   <li className="list-group-item"><strong>Jours de travaux :</strong> {form.jours.map(j => JOURS[j]).join(', ')}</li>
                   <li className="list-group-item"><strong>Impact circulation :</strong> {form.impact_circulation ? 'Oui' : 'Non'}</li>
                   {form.impact_circulation && (
-                    <li className="list-group-item"><strong>Sillons non circulants :</strong> {form.sillons_impactes.length ? form.sillons_impactes.map(id => {
-                      const s = sillons.find(si => si.id === id); return s ? (s.nom || s.name || `#${s.id}`) : `#${id}`;
-                    }).join(', ') : 'Aucun'}</li>
+                    <li className="list-group-item"><strong>Sillons non circulants :</strong> {form.sillons_impactes.length ? form.sillons_impactes.map(id => { const s = sillons.find(si => si.id === id); return s ? (`[${s.train_number || ('#'+s.id)}] (${(s.departure_time || s.departureTime || '').slice(0,5)} / ${(s.arrival_time || s.arrivalTime || '').slice(0,5)})`) : `#${id}`; }).join(', ') : 'Aucun'}</li>
                   )}
                   <li className="list-group-item"><strong>Substitutions :</strong> {form.substitutions ? 'Oui' : 'Non'}</li>
                   {form.substitutions && (
-                    <li className="list-group-item"><strong>Sillons de substitution :</strong> {form.sillons_substitution.length ? form.sillons_substitution.map(id => {
-                      const s = sillonsSub.find(si => si.id === id); return s ? (s.nom || s.name || `#${s.id}`) : `#${id}`;
-                    }).join(', ') : 'Aucun'}</li>
+                    <li className="list-group-item"><strong>Sillons de substitution :</strong> {form.sillons_substitution.length ? form.sillons_substitution.map(id => { const s = sillonsSub.find(si => si.id === id); return s ? (`[${s.train_number || ('#'+s.id)}] (${(s.departure_time || s.departureTime || '').slice(0,5)} / ${(s.arrival_time || s.arrivalTime || '').slice(0,5)})`) : `#${id}`; }).join(', ') : 'Aucun'}</li>
                   )}
                 </>
               )}
               <li className="list-group-item"><strong>Titre :</strong> {form.titre}</li>
               <li className="list-group-item"><strong>Contenu :</strong> <span dangerouslySetInnerHTML={{__html: form.contenu}} /></li>
             </ul>
-            <button type="submit" className="btn btn-success" disabled={saving}>{saving ? "Création…" : "Créer la perturbation"}</button>
+            <button type="submit" className="btn btn-success" disabled={saving}>{saving ? 'Mise à jour…' : 'Mettre à jour la perturbation'}</button>
           </div>
         )}
         <div className="d-flex justify-content-between mt-4">
           <button type="button" className="btn btn-outline-secondary" onClick={prevStep} disabled={step === 0}>Précédent</button>
-          {((form.type !== "travaux" && step < 3) || (form.type === "travaux" && step < 5)) && (
+          {((form.type !== 'travaux' && step < 3) || (form.type === 'travaux' && step < 5)) && (
             <button
               type="button"
               className="btn btn-primary"
@@ -470,15 +450,15 @@ export default function CreationPerturbationLigne() {
                 (step === 1 && (
                   !form.date_debut ||
                   !form.date_fin ||
-                  (form.type === "travaux" && (
+                  (form.type === 'travaux' && (
                     form.jours.length === 0 ||
                     !form.heure_debut ||
                     !form.heure_fin
                   ))
                 )) ||
                 (step === 2 && (!form.titre.trim() || !form.contenu || form.contenu === '<p><br></p>')) ||
-                (step === 3 && form.type === "travaux" && form.impact_circulation && sillons.length > 0 && form.sillons_impactes.length === 0) ||
-                (step === 4 && form.type === "travaux" && form.substitutions && sillonsSub.length > 0 && form.sillons_substitution.length === 0)
+                (step === 3 && form.type === 'travaux' && form.impact_circulation && sillons.length > 0 && form.sillons_impactes.length === 0) ||
+                (step === 4 && form.type === 'travaux' && form.substitutions && sillonsSub.length > 0 && form.sillons_substitution.length === 0)
               }
             >
               Suivant

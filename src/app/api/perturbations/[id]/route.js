@@ -41,6 +41,12 @@ export async function PATCH(request, { params }) {
       updateValues.push(payload.type);
     }
 
+    // Permettre la modification de la ligne associée si fournie
+    if (payload.ligne_id) {
+      updateFields.push('ligne_id = ?');
+      updateValues.push(payload.ligne_id);
+    }
+
     if (payload.titre) {
       updateFields.push('titre = ?');
       updateValues.push(payload.titre);
