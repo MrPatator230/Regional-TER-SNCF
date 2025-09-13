@@ -240,9 +240,46 @@ export default function SchedulesClient(){
     } catch(e){ alert(e.message); }
   }
 
-  useEffect(()=>{ if(!showModal) return; if(!formState.general.ligneId) return; if(formState.original) return; if(formState.stops.length>0) return; const l=lines.find(x=> String(x.id)===String(formState.general.ligneId)); if(!l) return; const seqIds=[l.depart_station_id, ...(Array.isArray(l.desservies)? l.desservies:[]), l.arrivee_station_id]; const nameById={}; stationObjs.forEach(o=> { nameById[o.id]=o.name; }); const seqNames=seqIds.map(id=> nameById[id]).filter(Boolean); const dep=formState.general.departureStation||l.depart_name; const arr=formState.general.arrivalStation||l.arrivee_name; if(!formState.general.departureStation||!formState.general.arrivalStation){ dispatch({type:'SET_GENERAL',payload:{ departureStation:dep, arrivalStation:arr }}); }
-    const depIdx=seqNames.indexOf(dep); const arrIdx=seqNames.indexOf(arr); if(depIdx>-1 && arrIdx>-1 && depIdx!==arrIdx){ let inter; if(depIdx<arrIdx) inter=seqNames.slice(depIdx+1,arrIdx); else inter=seqNames.slice(arrIdx+1,depIdx).reverse(); inter=inter.filter(n=> n!==dep && n!==arr); if(inter.length){ dispatch({type:'SET_STOPS',payload: inter.map(n=>({station:n,arrival:'',departure:''})) }); } }
-  },[showModal, formState.general.ligneId, formState.general.departureStation, formState.general.arrivalStation, formState.stops.length, formState.original, lines, stationObjs]);
+  useEffect(()=>{
+    // Conditions: modal ouvert, ligne choisie, mode création (pas original)
+    if(!showModal) return;
+    if(!formState.general.ligneId) return;
+    if(formState.original) return;
+    const l=lines.find(x=> String(x.id)===String(formState.general.ligneId));
+    if(!l) return;
+    const seqIds=[l.depart_station_id, ...(Array.isArray(l.desservies)? l.desservies:[]), l.arrivee_station_id];
+    const nameById={};
+    stationObjs.forEach(o=> { nameById[o.id]=o.name; });
+    const seqNames=seqIds.map(id=> nameById[id]).filter(Boolean);
+    const dep=formState.general.departureStation||l.depart_name;
+    const arr=formState.general.arrivalStation||l.arrivee_name;
+    // Si départ/arrivée non posés encore on force leur valeur par défaut
+    if(!formState.general.departureStation || !formState.general.arrivalStation){
+      dispatch({type:'SET_GENERAL',payload:{ departureStation:dep, arrivalStation:arr }});
+    }
+    const depIdx=seqNames.indexOf(dep);
+    const arrIdx=seqNames.indexOf(arr);
+    if(depIdx>-1 && arrIdx>-1 && depIdx!==arrIdx){
+      let inter;
+      if(depIdx < arrIdx) inter = seqNames.slice(depIdx+1, arrIdx); else inter = seqNames.slice(arrIdx+1, depIdx).reverse();
+      inter = inter.filter(n => n!==dep && n!==arr);
+      // Filtrage transport 'train'
+      const transportsByName = {};
+      stationObjs.forEach(o=> { transportsByName[o.name]=Array.isArray(o.transports)? o.transports.map(t=> String(t).toLowerCase()): []; });
+      inter = inter.filter(n => (transportsByName[n]||[]).includes('train'));
+      // Comparer avec stops actuels (séquence des noms)
+      const currentSeq = formState.stops.map(s=> s.station);
+      const equal = currentSeq.length===inter.length && currentSeq.every((v,i)=> v===inter[i]);
+      if(!equal){
+        dispatch({type:'SET_STOPS',payload: inter.map(n=>({station:n,arrival:'',departure:''})) });
+      }
+    } else {
+      // Si incohérence (indices introuvables) et on a des stops pré-remplis, on les efface
+      if(formState.stops.length){
+        dispatch({type:'SET_STOPS',payload: []});
+      }
+    }
+  },[showModal, formState.general.ligneId, formState.general.departureStation, formState.general.arrivalStation, formState.original, lines, stationObjs, formState.stops]);
 
   function openCreate(){ dispatch({type:'RESET'}); setShowModal(true); setFormError(''); setModalTab('general'); }
   async function openEdit(id){ try { const r=await fetch('/api/schedules?id='+id+'&withStops=1', { credentials:'include' }); if(!r.ok) throw new Error('Lecture impossible'); const s=await r.json(); const dto={ id:s.id, ligneId:s.ligne_id||s.ligneId, departureStation:s.departure_station||s.departureStation, arrivalStation:s.arrival_station||s.arrivalStation, departureTime:(s.departure_time||s.departureTime||'').slice(0,5), arrivalTime:(s.arrival_time||s.arrivalTime||'').slice(0,5), trainNumber:s.train_number||s.trainNumber||'', trainType:s.train_type||s.trainType||'', rollingStock:s.rolling_stock||s.rollingStock||'', days:s.days||s.days, customDates:s.custom_dates||s.customDates||[], stops: (Array.isArray(s.stops)? s.stops:[]).map(st=> ({ station: st.station_name||st.station, arrival:(st.arrival_time||st.arrival||'').slice(0,5), departure:(st.departure_time||st.departure||'').slice(0,5) })), isSubstitution: !!(s.isSubstitution ?? s.is_substitution) };
@@ -459,7 +496,7 @@ export default function SchedulesClient(){
       .week-item .tt{font-family:monospace}
       .stops-list{display:flex;flex-direction:column;gap:.6rem;margin-top:.5rem}
       .stop-item{background:#f6f6f8;padding:.6rem .65rem;border:1px solid #dcdce2;border-radius:6px;}
-      .stop-item.compact{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+      .stop-item.compact{display:flex;align-items:center;gap:.55rem;flex-wrap:nowrap;overflow-x:auto}
       .stop-item.compact .stop-col.station{min-width:200px;flex:1 1 220px}
       .stop-item.compact .stop-col.time input{width:105px}
       .stop-item.compact .arrow{font-size:.75rem;opacity:.6}
@@ -516,4 +553,3 @@ function SubstitutionForm({state,dispatch}){
     `}</style>
   </div>;
 }
-

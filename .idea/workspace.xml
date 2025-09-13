@@ -5,21 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Alpha V4.0.5 // INITIAL COMMIT">
-      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.agent.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.edit.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/espace/admin/perturbations/lignes/[id]/page.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/espace/admin/perturbations/lignes/edition/[id]/page.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/app/espace/admin/schedules/SchedulesClient.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/api/fiches-horaires/route.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/app/espace/admin/fiches-horaires/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/copilotDiffState.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/public/img/type/data.json" beforeDir="false" afterPath="$PROJECT_DIR$/public/img/type/data.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/api/perturbations/[id]/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/perturbations/[id]/route.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/espace/admin/perturbations/lignes/creation/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/espace/admin/perturbations/lignes/creation/page.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/espace/admin/schedules/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/espace/admin/schedules/page.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/globals.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/globals.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/layout.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/layout.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/js/db-schedule.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/js/db-schedule.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/js/db.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/js/db.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/api/lignes/[id]/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/api/lignes/[id]/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/espace/admin/components/nav.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/espace/admin/components/nav.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/espace/admin/schedules/SchedulesClient.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/espace/admin/schedules/SchedulesClient.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -108,7 +102,7 @@
       <workItem from="1757521806417" duration="15520000" />
       <workItem from="1757763142213" duration="5368000" />
       <workItem from="1757789656738" duration="484000" />
-      <workItem from="1757791394601" duration="3465000" />
+      <workItem from="1757791394601" duration="8975000" />
     </task>
     <task id="LOCAL-00001" summary="Alpha V4.0.5 // INITIAL COMMIT">
       <option name="closed" value="true" />

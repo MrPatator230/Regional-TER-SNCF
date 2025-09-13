@@ -77,6 +77,13 @@ export default function AdminNav() {
               <span>Attribution des quais</span>
             </Link>
           </wcs-nav-item>
+
+          <wcs-nav-item className="">
+            <Link href="/espace/admin/fiches-horaires">
+              <wcs-mat-icon icon="picture_as_pdf"></wcs-mat-icon>
+              <span>Fiches horaires</span>
+            </Link>
+          </wcs-nav-item>
         </wcs-nav>
       </div>
     </>
