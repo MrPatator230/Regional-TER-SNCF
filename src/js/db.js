@@ -24,3 +24,4 @@ export async function query(sql, params) {
   const [rows] = await getDb().execute(sql, params);
   return rows;
 }
+

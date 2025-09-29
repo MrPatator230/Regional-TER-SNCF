@@ -26,7 +26,46 @@ function extractGeneral(payload){
 
 export function normalizeStops(raw){ if(!Array.isArray(raw)) return []; return raw.map(r=>({ station: normStr(r.station||r.station_name,190), arrival: (r.arrival||r.arrival_time||'').slice(0,5), departure:(r.departure||r.departure_time||'').slice(0,5) })).filter(s=>s.station); }
 export function serializeStops(stops){ return JSON.stringify(stops.map(s=>({ station_name:s.station, arrival_time: s.arrival? cleanTime(s.arrival): null, departure_time: s.departure? cleanTime(s.departure): null }))); }
-export function parseStopsJson(raw){ if(!raw) return []; try { const arr = typeof raw==='string'? JSON.parse(raw): raw; if(!Array.isArray(arr)) return []; return arr.filter(s=>s && (s.station_name||s.station)).map(s=>({ station: s.station_name||s.station, arrival: (s.arrival_time||s.arrival||'')?.slice(0,5), departure:(s.departure_time||s.departure||'')?.slice(0,5) })); } catch { return []; } }
+export function parseStopsJson(raw){
+  if(!raw) return [];
+  try {
+    const data = typeof raw==='string'? JSON.parse(raw): raw;
+    if(Array.isArray(data)) {
+      // Ancien format : simple tableau
+      return data.filter(s=>s && (s.station_name||s.station)).map(s=>({
+        station: s.station_name||s.station,
+        arrival: (s.arrival_time||s.arrival||'')?.slice(0,5),
+        departure:(s.departure_time||s.departure||'')?.slice(0,5)
+      }));
+    } else if(data && typeof data==='object' && ('Origine' in data || 'Terminus' in data)) {
+      // Nouveau format hiérarchique
+      const stops = [];
+      if(data.Origine) stops.push({
+        station: data.Origine.station_name||data.Origine.station,
+        arrival: (data.Origine.arrival_time||data.Origine.arrival||'')?.slice(0,5),
+        departure: (data.Origine.departure_time||data.Origine.departure||'')?.slice(0,5)
+      });
+      if(Array.isArray(data.Desservies)) {
+        for(const s of data.Desservies) {
+          stops.push({
+            station: s.station_name||s.station,
+            arrival: (s.arrival_time||s.arrival||'')?.slice(0,5),
+            departure: (s.departure_time||s.departure||'')?.slice(0,5)
+          });
+        }
+      }
+      if(data.Terminus && (!stops.length || (stops[stops.length-1].station !== (data.Terminus.station_name||data.Terminus.station)))) {
+        stops.push({
+          station: data.Terminus.station_name||data.Terminus.station,
+          arrival: (data.Terminus.arrival_time||data.Terminus.arrival||'')?.slice(0,5),
+          departure: (data.Terminus.departure_time||data.Terminus.departure||'')?.slice(0,5)
+        });
+      }
+      return stops;
+    }
+    return [];
+  } catch { return []; }
+}
 
 export function parseDaysPayload(daysRaw, customRaw){ let daysObj=null; try { daysObj = typeof daysRaw==='string'? JSON.parse(daysRaw): daysRaw; } catch { daysObj=null; }
   const customDates = Array.isArray(customRaw)? customRaw: ( ()=>{ try { return typeof customRaw==='string'? JSON.parse(customRaw): []; } catch { return []; } })();

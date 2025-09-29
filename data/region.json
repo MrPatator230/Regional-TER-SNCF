@@ -70,14 +70,14 @@
     },
     {
       "slug": "sncf",
-      "name": "Sncf",
+      "name": "SNCF",
       "icon": "/img/type/logo-sncf.svg",
       "logo": "logo-sncf.svg",
       "category": "Logos SNCF"
     },
     {
       "slug": "sncf-voyageurs-logo",
-      "name": "SNCF Voyageurs",
+      "name": "TER",
       "icon": "/img/type/sncf-voyageurs-logo.png",
       "logo": "sncf-voyageurs-logo.png",
       "category": "Logos SNCF"
@@ -224,42 +224,42 @@
     },
     {
       "slug": "ter-rhone-alpes",
-      "name": "TER Rhone Alpes",
+      "name": "TER Rhone-Alpes",
       "icon": "/img/type/logo-ter-rhone-alpes.svg",
       "logo": "logo-ter-rhone-alpes.svg",
       "category": "Régional"
     },
     {
       "slug": "teralsace",
-      "name": "Teralsace",
+      "name": "TER Alsace",
       "icon": "/img/type/logo-teralsace.svg",
       "logo": "logo-teralsace.svg",
       "category": "Régional"
     },
     {
       "slug": "teraquitaine",
-      "name": "Teraquitaine",
+      "name": "TER Aquitaine",
       "icon": "/img/type/logo-teraquitaine.svg",
       "logo": "logo-teraquitaine.svg",
       "category": "Régional"
     },
     {
       "slug": "terbassenormandie",
-      "name": "Terbassenormandie",
+      "name": "TER Basse Normandie",
       "icon": "/img/type/logo-terbassenormandie.svg",
       "logo": "logo-terbassenormandie.svg",
       "category": "Régional"
     },
     {
       "slug": "terbourgogne",
-      "name": "Terbourgogne",
+      "name": "TER Bourgogne",
       "icon": "/img/type/logo-terbourgogne.svg",
       "logo": "logo-terbourgogne.svg",
       "category": "Régional"
     },
     {
       "slug": "terbretagne",
-      "name": "Terbretagne",
+      "name": "TER Bretagne",
       "icon": "/img/type/logo-terbretagne.svg",
       "logo": "logo-terbretagne.svg",
       "category": "Régional"
@@ -364,7 +364,7 @@
     },
     {
       "slug": "auvergerhonealpes",
-      "name": "Auvergerhonealpes",
+      "name": "AURA",
       "icon": "/img/type/logo-auvergerhonealpes.svg",
       "logo": "logo-auvergerhonealpes.svg",
       "category": "Régions (après 2016)"
@@ -385,14 +385,14 @@
     },
     {
       "slug": "hautsdefrance",
-      "name": "Hautsdefrance",
+      "name": "Hauts-de-France",
       "icon": "/img/type/logo-hautsdefrance.svg",
       "logo": "logo-hautsdefrance.svg",
       "category": "Régions (après 2016)"
     },
     {
       "slug": "lio",
-      "name": "Lio",
+      "name": "LiO",
       "icon": "/img/type/logo-lio.svg",
       "logo": "logo-lio.svg",
       "category": "Régions (après 2016)"

@@ -13,37 +13,95 @@ export function usePerturbations() {
   // Récupère toutes les perturbations actives
   useEffect(() => {
     let isMounted = true;
+    let pollId = null;
+    let lastPayload = null;
 
     async function fetchPerturbations() {
       try {
-        setLoading(true);
-        const res = await fetch('/api/perturbations/public');
+        // Récupérer simultanément les perturbations publiques et les variantes quotidiennes
+        const [rPublic, rDaily] = await Promise.all([
+          fetch('/api/perturbations/public'),
+          fetch('/api/perturbations/daily?days=3')
+        ]);
+        if (!rPublic.ok) throw new Error('Erreur lors de la récupération des perturbations publiques');
+        if (!rDaily.ok) {
+          // on tolère l'absence de daily, on utilisera uniquement public
+          const pub = await rPublic.json();
+          const payload = JSON.stringify(pub?.perturbations || []);
+          if (isMounted && payload !== lastPayload) {
+            lastPayload = payload;
+            setPerturbations(pub.perturbations || []);
+            setError(null);
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+              try { window.dispatchEvent(new CustomEvent('perturbations:updated', { detail: { at: Date.now() } })); } catch(e) { /* silenced */ }
+            }
+          }
+          return;
+        }
+        const dataPub = await rPublic.json();
+        const dataDaily = await rDaily.json();
+        const publicList = Array.isArray(dataPub?.perturbations) ? dataPub.perturbations : (dataPub || []);
+        const dailyList = Array.isArray(dataDaily?.perturbations) ? dataDaily.perturbations : (dataDaily || []);
 
-        if (!res.ok) {
-          throw new Error('Erreur lors de la récupération des perturbations');
+        // merge publicList + dailyList, en évitant les doublons basés sur schedule_id/sillon_id + date
+        const merged = Array.isArray(publicList) ? [...publicList] : [];
+        const seenDailyKeys = new Set();
+        // construire set des clefs déjà présentes dans public (schedule_id/date)
+        for (const p of merged) {
+          const sid = p.schedule_id ?? p.sillon_id ?? p.sillonId ?? null;
+          const date = p.date ?? p.day ?? null;
+          if (sid && date) seenDailyKeys.add(`${sid}_${date}`);
+        }
+        for (const d of dailyList) {
+          const sid = d.schedule_id ?? d.sillon_id ?? d.sillonId ?? null;
+          const date = d.date ?? null;
+          const key = sid && date ? `${sid}_${date}` : null;
+          if (key && seenDailyKeys.has(key)) {
+            // déjà présent dans public (éviter duplication)
+            continue;
+          }
+          // Normaliser quelques champs pour la compatibilité côté client
+          const norm = {
+            // garder la trace brute
+            ...d,
+            // double nommage pour compatibilité
+            sillon_id: d.schedule_id ?? d.sillon_id ?? d.sillonId ?? null,
+            schedule_id: d.schedule_id ?? d.sillon_id ?? d.sillonId ?? null,
+            // id string pour éviter conflit simple
+            id: d.id != null ? (`daily-${d.id}`) : (d.id || null),
+          };
+          merged.push(norm);
+          if (key) seenDailyKeys.add(key);
         }
 
-        const data = await res.json();
-
-        if (isMounted) {
-          setPerturbations(data.perturbations || []);
+        const payload = JSON.stringify(merged || []);
+        // Ne pas rerendre si identique
+        if (isMounted && payload !== lastPayload) {
+          lastPayload = payload;
+          setPerturbations(merged || []);
           setError(null);
+          // Dispatch d'un événement global pour que d'autres parties de l'app puissent se réactualiser
+          if (typeof window !== 'undefined' && window.dispatchEvent) {
+            try { window.dispatchEvent(new CustomEvent('perturbations:updated', { detail: { at: Date.now() } })); } catch(e) { /* silenced */ }
+          }
         }
       } catch (err) {
         if (isMounted) {
           setError(err.message || 'Une erreur est survenue');
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     }
 
+    // Chargement initial
     fetchPerturbations();
+    // Polling périodique (tous les 60s)
+    pollId = setInterval(() => fetchPerturbations(), 60000);
 
     return () => {
       isMounted = false;
+      if (pollId) clearInterval(pollId);
     };
   }, []);
 

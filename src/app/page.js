@@ -1,8 +1,26 @@
 "use client";
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import PerturbationBanner from '@/app/components/PerturbationBanner';
 import Header from './components/Header';
 import { useRouter } from 'next/navigation';
 import { platformForStation } from '@/app/utils/platform';
+import { usePerturbations } from '@/app/hooks/usePerturbations';
+
+// helper: enrichir une liste de schedules avec les perturbations quotidiennes
+function enrichSchedulesWithDailyPerturbationsLocal(schedules = [], perturbations = []){
+  if(!schedules || !schedules.length) return schedules;
+  return schedules.map(s => {
+    const pert = (perturbations || []).find(p => Number(p.sillon_id) === Number(s.id) && (!p.date || p.date === s.date));
+    if(!pert) return s;
+    return {
+      ...s,
+      cancelled: pert.type === 'suppression' || s.cancelled,
+      delay_min: (pert.delay_minutes != null && Number(pert.delay_minutes)) || s.delay_min || 0,
+      delay_cause: pert.cause || pert.message || s.delay_cause || null,
+      cancel_message: pert.message || s.cancel_message || null,
+    };
+  });
+}
 
 export default function Home() {
   // Etats du planner
@@ -292,14 +310,20 @@ export default function Home() {
       .catch(e=> setBoards(b=> ({ ...b, [meta.id]: { loading:false, error:e.message||'Erreur', schedules:[] } })));
   }, [depStationIdx, stationChoices, stationResolved, boards]);
 
+  const { perturbations } = usePerturbations();
+
   const nextFive = useMemo(()=> {
-    const choice = stationChoices[depStationIdx];
-    const meta = stationResolved[choice.name];
-    if(!meta || !meta.id) return [];
-    const board = boards[meta.id];
-    if(!board || board.loading || board.error) return [];
-    return board.schedules.slice(0,5);
-  }, [depStationIdx, stationChoices, stationResolved, boards]);
+     const choice = stationChoices[depStationIdx];
+     const meta = stationResolved[choice.name];
+     if(!meta || !meta.id) return [];
+     const board = boards[meta.id];
+     if(!board || board.loading || board.error) return [];
+     // enrichir avec les perturbations quotidiennes (si présentes)
+     const base = board.schedules.slice(0,5);
+     try{ return enrichSchedulesWithDailyPerturbationsLocal(base, perturbations); }catch(e){ return base; }
+   }, [depStationIdx, stationChoices, stationResolved, boards]);
+  // inclure perturbations dans les dépendances pour refaire le calcul
+  // NOTE: usePerturbations déclenche un rerendu quand les perturbations changent
 
   return (
       <>
@@ -634,15 +658,13 @@ export default function Home() {
                           </wcs-button>
                         </div>
                         {s.cancelled && (
-                          <div className="delay-message" style={{color:'#b00020'}}>
-                            <wcs-mat-icon icon="report"></wcs-mat-icon>
-                            Supprimé{s.info? ` – ${s.info.replace(/^Supprimé\s*–?\s*/i,'')}`:''}
+                          <div style={{padding: '8px 12px'}}>
+                            <PerturbationBanner perturbation={{ type: 'cancel', titre: 'Supprimé', cause: s.info ? s.info.replace(/^Supprimé\s*–?\s*/i,'') : undefined }} />
                           </div>
                         )}
                         {!s.cancelled && s.delay_min && (
-                          <div className="delay-message">
-                            <wcs-mat-icon icon="warning_amber"></wcs-mat-icon>
-                            Retard estimé de {s.delay_min} min
+                          <div style={{padding: '8px 12px'}}>
+                            <PerturbationBanner perturbation={{ type: 'retard', retard_min: s.delay_min, cause: s.info || undefined }} />
                           </div>
                         )}
                       </React.Fragment>

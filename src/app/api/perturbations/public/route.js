@@ -1,7 +1,30 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/js/db';
+import { scheduleQuery } from '@/js/db-schedule';
 
 export const runtime = 'nodejs';
+
+async function readDailyPerturbationsFromDB(days = 3){
+  // construit la liste des dates (YYYY-MM-DD) pour aujourd'hui + (days-1)
+  const dates = [];
+  const now = new Date();
+  for(let i=0;i<days;i++){ const d = new Date(now); d.setDate(now.getDate()+i); dates.push(d.toISOString().slice(0,10)); }
+  if(!dates.length) return [];
+  const ph = dates.map(()=>'?').join(',');
+  const rows = await scheduleQuery(`SELECT * FROM schedule_daily_variants WHERE date IN (${ph}) ORDER BY date ASC, schedule_id ASC`, dates);
+  return (rows || []).map(r => ({
+    // normalisation minimale utilisée côté client : sillon_id + date + type + delay_minutes/message/data
+    id: `daily-${r.id}`,
+    sillon_id: r.schedule_id,
+    date: r.date,
+    type: r.type || (r.removed_stops ? 'suppression' : (r.delay_minutes ? 'retard' : 'modification')),
+    delay_minutes: r.delay_minutes != null ? Number(r.delay_minutes) : 0,
+    message: r.cause || r.message || null,
+    data: { raw: r },
+    created_at: r.created_at ?? null,
+    updated_at: r.updated_at ?? null,
+  }));
+}
 
 // GET /api/perturbations/public - Récupère les perturbations visibles par le public
 export async function GET(request) {
@@ -31,7 +54,13 @@ export async function GET(request) {
       return { ...r, data };
     });
 
-    return NextResponse.json({ perturbations });
+    // Lire les perturbations quotidiennes de sillon depuis la table schedule_daily_variants et les inclure
+    const daily = await readDailyPerturbationsFromDB(3);
+
+    // Fusionner : on ajoute les perturbations quotidiennes à la liste retournée
+    const merged = perturbations.concat(daily);
+
+    return NextResponse.json({ perturbations: merged });
   } catch (e) {
     console.error('GET /api/perturbations/public', e);
     return NextResponse.json({ error: e.message || 'Erreur serveur' }, { status: 500 });

@@ -86,6 +86,8 @@ export async function GET(req, ctx){
                  ds.id AS origin_id, ds.name AS origin_name,
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(s.departure_time,'%H:%i') AS time,
+                 TIME_FORMAT(s.departure_time,'%H:%i') AS schedule_departure_time,
+                 TIME_FORMAT(s.arrival_time,'%H:%i') AS schedule_arrival_time,
                  sp.platform AS platform,
                  s.departure_station_id AS current_station_id,
                  s.days_mask, s.flag_custom
@@ -102,6 +104,8 @@ export async function GET(req, ctx){
                  ds.id AS origin_id, ds.name AS origin_name,
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(st.departure_time,'%H:%i') AS time,
+                 TIME_FORMAT(s.departure_time,'%H:%i') AS schedule_departure_time,
+                 TIME_FORMAT(s.arrival_time,'%H:%i') AS schedule_arrival_time,
                  sp.platform AS platform,
                  st.station_id AS current_station_id,
                  s.days_mask, s.flag_custom
@@ -124,6 +128,8 @@ export async function GET(req, ctx){
                  ds.id AS origin_id, ds.name AS origin_name,
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(s.arrival_time,'%H:%i') AS time,
+                 TIME_FORMAT(s.departure_time,'%H:%i') AS schedule_departure_time,
+                 TIME_FORMAT(s.arrival_time,'%H:%i') AS schedule_arrival_time,
                  sp.platform AS platform,
                  s.arrival_station_id AS current_station_id,
                  s.days_mask, s.flag_custom
@@ -140,6 +146,8 @@ export async function GET(req, ctx){
                  ds.id AS origin_id, ds.name AS origin_name,
                  as2.id AS dest_id,  as2.name AS dest_name,
                  DATE_FORMAT(st.arrival_time,'%H:%i') AS time,
+                 TIME_FORMAT(s.departure_time,'%H:%i') AS schedule_departure_time,
+                 TIME_FORMAT(s.arrival_time,'%H:%i') AS schedule_arrival_time,
                  sp.platform AS platform,
                  st.station_id AS current_station_id,
                  s.days_mask, s.flag_custom
@@ -265,10 +273,11 @@ export async function GET(req, ctx){
         }
       }
 
-      const list = rows
+      let list = rows
         .map(r=>{
           if(!runsOnDay(r, date)) return null; // filtrage jours de circulation
-          const base = { id:r.id, ligne_id: r.ligne_id, time:r.time, origin:r.origin_name, destination:r.dest_name, train_type:r.train_type, train_number:r.train_number||'', platform:r.platform||null, delay_min:null, delay_cause:null, cancelled:false, rerouted:false, days_mask: r.days_mask };
+          // inclure origin_id/dest_id pour permettre résolution par ID plus tard
+          const base = { id:r.id, ligne_id: r.ligne_id, time:r.time, origin:r.origin_name, origin_id: r.origin_id, destination:r.dest_name, dest_id: r.dest_id, train_type:r.train_type, train_number:r.train_number||'', platform:r.platform||null, delay_min:null, delay_minutes:null, delay_cause:null, cancelled:false, rerouted:false, days_mask: r.days_mask, schedule_departure_time: r.schedule_departure_time || null, schedule_arrival_time: r.schedule_arrival_time || null };
 
           // Filtrage perturbations: exclusion de sillons sélectionnés
           const perts = pertsByLine.get(r.ligne_id)||[];
@@ -306,12 +315,18 @@ export async function GET(req, ctx){
               const im = indexMap.get(r.id)||new Map();
               const fromIdx = v.delay_from_station_id? (im.get(v.delay_from_station_id) ?? 0) : 0;
               const curIdx = im.get(r.current_station_id) ?? 0;
-              if(curIdx>=fromIdx){ return { ...base, delay_min:m, delay_cause:v.cause||null /* time conservée */ }; }
+              if(curIdx>=fromIdx){
+                // set both delay_min and delay_minutes for frontend compatibility
+                return { ...base, delay_min: m, delay_minutes: m, delay_cause: v.cause||null /* time conservée */ };
+              }
             }
             return base;
           }
           if(v.type==='modification'){
-            let removedList=[]; try{ removedList = v.removed_stops? JSON.parse(v.removed_stops): []; } catch {}
+            let removedList;
+            try{
+              removedList = v.removed_stops ? (Array.isArray(v.removed_stops) ? v.removed_stops : JSON.parse(v.removed_stops)) : [];
+            } catch(e){ removedList = []; }
             // Exclure si la gare courante est supprimée
             if(removedList.some(name=> String(name||'').trim().toLowerCase() === String(station.name||'').trim().toLowerCase())){
               return null; // filtré
@@ -347,6 +362,136 @@ export async function GET(req, ctx){
           return s;
         });
 
+      // --- new: pour chaque jour, récupérer les arrêts détaillés (origine, arrêts intermédiaires, terminus)
+      const schedIdsForDate = list.map(s=>s.id);
+      if(schedIdsForDate.length){
+        const stopRows = await scheduleQuery(
+          `SELECT st.schedule_id, st.stop_order, st.station_id, TIME_FORMAT(st.arrival_time,'%H:%i') AS arrival_time, TIME_FORMAT(st.departure_time,'%H:%i') AS departure_time, ss.name AS station_name
+             FROM schedule_stops st
+             JOIN stations ss ON ss.id = st.station_id
+            WHERE st.schedule_id IN (${schedIdsForDate.map(()=>'?').join(',')})
+            ORDER BY st.schedule_id, st.stop_order`,
+          schedIdsForDate
+        );
+        const platRows = await scheduleQuery(
+          `SELECT schedule_id, station_id, platform FROM schedule_platforms WHERE schedule_id IN (${schedIdsForDate.map(()=>'?').join(',')})`,
+          schedIdsForDate
+        );
+        // Résoudre les noms des gares origine/terminus via leurs IDs dans la base 'horaires'
+        const stationIdsSet = new Set();
+        for(const r of stopRows){ stationIdsSet.add(r.station_id); }
+        for(const s of list){ if(s.origin_id) stationIdsSet.add(s.origin_id); if(s.dest_id) stationIdsSet.add(s.dest_id); }
+        const stationIds = Array.from(stationIdsSet);
+        const stationNameById = new Map();
+        if(stationIds.length){
+          const nameRows = await scheduleQuery(
+            `SELECT id, name FROM stations WHERE id IN (${stationIds.map(()=>'?').join(',')})`,
+            stationIds
+          );
+          nameRows.forEach(r=> stationNameById.set(r.id, r.name));
+        }
+        const stopsMap = new Map();
+        for(const r of stopRows){ if(!stopsMap.has(r.schedule_id)) stopsMap.set(r.schedule_id, []); stopsMap.get(r.schedule_id).push({ station_id: r.station_id, station_name: r.station_name, arrival_time: r.arrival_time, departure_time: r.departure_time }); }
+        const platMap = new Map();
+        for(const p of platRows){ platMap.set(p.schedule_id+"_"+p.station_id, p.platform); }
+
+        // Attacher les stops à chaque schedule (inclut origine/terminus)
+        list = list.map(s=>{
+          // récupérer la variante journalière si présente
+          const v = varMap.get(s.id);
+          const stops = [];
+          // origine
+          if(s.origin_id){
+            const originPlatform = platMap.get(s.id+"_"+s.origin_id) || null;
+            const originName = stationNameById.get(s.origin_id) || s.origin || null;
+            stops.push({ station_id: s.origin_id, station_name: originName, arrival_time: null, departure_time: s.schedule_departure_time || null, platform: originPlatform, origin: true, time: s.schedule_departure_time || null });
+          }
+          const mid = stopsMap.get(s.id) || [];
+          for(const m of mid){
+            const pf = platMap.get(s.id+"_"+m.station_id) || null;
+            // mid.station_name provient déjà de la table stations de la base 'horaires'
+            stops.push({ station_id: m.station_id, station_name: m.station_name, arrival_time: m.arrival_time, departure_time: m.departure_time, platform: pf, origin: false, time: (m.arrival_time||m.departure_time||null) });
+          }
+          // terminus
+          if(s.dest_id){
+            const destPlatform = platMap.get(s.id+"_"+s.dest_id) || null;
+            const destName = stationNameById.get(s.dest_id) || s.destination || null;
+            stops.push({ station_id: s.dest_id, station_name: destName, arrival_time: s.schedule_arrival_time || null, departure_time: null, platform: destPlatform, dest: true, time: s.schedule_arrival_time || null });
+          }
+
+          // --- appliquer variantes quotidiennes si présentes (modification.removed_stops, mod_departure_station_id, mod_arrival_station_id, mod_*_time)
+          if(v && v.type === 'modification'){
+            // removed_stops peut être JSON ou chaîne ; normaliser en tableau de noms
+            let removedList;
+            try{
+              removedList = v.removed_stops ? (Array.isArray(v.removed_stops) ? v.removed_stops : JSON.parse(v.removed_stops)) : [];
+            } catch(e){ removedList = []; }
+            const removedNorm = removedList.map(x=> String(x||'').trim().toLowerCase());
+            if(removedNorm.length){
+              // filtrer les stops dont le nom figure dans removedList
+              for(let i = stops.length-1; i>=0; i--){ const name = String(stops[i].station_name||'').trim().toLowerCase(); if(removedNorm.includes(name)){ stops.splice(i,1); } }
+            }
+
+            // Si modification du départ
+            if(v.mod_departure_station_id){
+              const newDepId = v.mod_departure_station_id;
+              const idx = stops.findIndex(st=> st.station_id === newDepId);
+              if(idx > 0){
+                // on supprime tout avant cet index et marque le 1er comme origine
+                stops.splice(0, idx);
+                stops[0].origin = true;
+              } else if(idx === -1){
+                // station non présente: insérer au début
+                const nm = stationNameById.get(newDepId) || null;
+                stops.unshift({ station_id: newDepId, station_name: nm, arrival_time: null, departure_time: v.mod_departure_time || null, platform: platMap.get(s.id+"_"+newDepId)||null, origin: true, time: v.mod_departure_time || null });
+              } else if(idx === 0){
+                stops[0].origin = true;
+                if(v.mod_departure_time){
+                  stops[0].departure_time = v.mod_departure_time;
+                  stops[0].time = v.mod_departure_time;
+                }
+              }
+            }
+
+            // Si modification du terminus
+            if(v.mod_arrival_station_id){
+              const newArrId = v.mod_arrival_station_id;
+              const idxA = stops.findIndex(st=> st.station_id === newArrId);
+              if(idxA >= 0 && idxA < stops.length-1){
+                // tronquer après cet index
+                stops.splice(idxA+1);
+                stops[stops.length-1].dest = true;
+              } else if(idxA === -1){
+                const nm = stationNameById.get(newArrId) || null;
+                stops.push({ station_id: newArrId, station_name: nm, arrival_time: v.mod_arrival_time || null, departure_time: null, platform: platMap.get(s.id+"_"+newArrId)||null, dest: true, time: v.mod_arrival_time || null });
+              } else if(idxA === stops.length-1){
+                stops[stops.length-1].dest = true;
+                if(v.mod_arrival_time){
+                  stops[stops.length-1].arrival_time = v.mod_arrival_time;
+                  stops[stops.length-1].time = v.mod_arrival_time;
+                }
+              }
+            }
+
+            // Appliquer modifications d'horaires ponctuelles sur les stops si présentées
+            if(v.mod_departure_station_id && v.mod_departure_time){
+              const st = stops.find(x=> x.station_id === v.mod_departure_station_id);
+              if(st){ st.departure_time = v.mod_departure_time; st.time = v.mod_departure_time; }
+            }
+            if(v.mod_arrival_station_id && v.mod_arrival_time){
+              const st = stops.find(x=> x.station_id === v.mod_arrival_station_id);
+              if(st){ st.arrival_time = v.mod_arrival_time; st.time = v.mod_arrival_time; }
+            }
+          }
+
+          // normaliser: n'avoir qu'un seul flag origin/dest correct
+          if(stops.length){ stops.forEach((t,ii)=>{ t.origin = !!(ii===0 && t.origin); t.dest = !!(ii===stops.length-1 && t.dest); }); }
+
+           return { ...s, stops };
+         });
+       }
+
+      // pousser la journée construite dans le tableau days
       days.push({ date, schedules: list });
     }
 

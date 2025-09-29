@@ -34,6 +34,29 @@ function buildOriginalAllStops(row, stops, platformByStationId){ const arr = [];
   arr.push({ station: row.arrival_station, arrival: row.arrival_time, departure: row.arrival_time, platform: platformByStationId?.get(row.arrival_station_id) || null });
   return arr; }
 
+// --- Nouveau: helpers et chargement des perturbations publiques par ligne ---
+function isPerturbationActiveFor(dateISO, timeHHMM, p){
+  if(!p) return false;
+  const date = dateISO? new Date(dateISO+'T12:00:00'): new Date();
+  const jourIdx = date.getDay(); // 0=Dim..6=Sam
+  const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  if(Array.isArray(p.data?.jours) && p.data.jours.length>0){ if(!p.data.jours.includes(jours[jourIdx])) return false; }
+  const start = p.date_debut? new Date(p.date_debut): null;
+  const end   = p.date_fin? new Date(p.date_fin): null;
+  if(start && date < new Date(start.toISOString().slice(0,10)+'T00:00:00')) return false;
+  if(end && date > new Date(end.toISOString().slice(0,10)+'T23:59:59')) return false;
+  // Heure
+  if(p.data?.horaire_interruption){
+    const t = timeToMin(timeHHMM); if(t==null) return true;
+    const s = timeToMin(p.data.horaire_interruption.debut||'00:00') ?? 0;
+    const e = timeToMin(p.data.horaire_interruption.fin||'23:59') ?? 1439;
+    if(s<=e){ if(!(t>=s && t<=e)) return false; } else { // couvre minuit
+      if(!(t>=s || t<=e)) return false;
+    }
+  }
+  return true;
+}
+
 export async function GET(request){
   try {
     const { searchParams } = new URL(request.url);
@@ -59,6 +82,21 @@ export async function GET(request){
         [number]
       );
       if(!rows.length){ return NextResponse.json({ error:'Aucun train' }, { status:404 }); }
+
+      // Charger perturbations publiques pour les lignes concernées (si présentes)
+      const ligneIds = Array.from(new Set(rows.map(r=> r.ligne_id).filter(Boolean)));
+      let pertsByLine = new Map();
+      if(ligneIds.length){
+        const nowIso = new Date().toISOString();
+        const placeholders = ligneIds.map(()=>'?').join(',');
+        const perts = await mainQuery(
+          `SELECT p.* FROM perturbations p WHERE (p.date_fin > ? OR p.date_fin IS NULL) AND p.ligne_id IN (${placeholders}) ORDER BY p.date_debut ASC`,
+          [nowIso, ...ligneIds]
+        );
+        for(const p of perts){ try{ p.data = p.data? (typeof p.data==='string'? JSON.parse(p.data): p.data): {}; } catch{ p.data={}; }
+          const list = pertsByLine.get(p.ligne_id) || []; list.push(p); pertsByLine.set(p.ligne_id, list);
+        }
+      }
 
       const schedules = [];
       for(const base of rows){
@@ -160,6 +198,23 @@ export async function GET(request){
             rerouted = removedSet.size>0 || newDepName!==base.departure_station || newArrName!==base.arrival_station;
             original_departure_time = base.departure_time;
             original_arrival_time = base.arrival_time;
+          }
+        }
+
+        // --- Nouveau: prendre en compte les perturbations publiques (si listent ce sillon en suppression) ---
+        if(!cancelled){
+          const perts = pertsByLine.get(base.ligne_id) || [];
+          for(const p of perts){
+            if(!isPerturbationActiveFor(targetDate, base.departure_time, p)) continue;
+            // Listes possibles dans la data: exclude_schedules, suppression_sillons, sillons
+            const rawSel = Array.isArray(p.data?.exclude_schedules) ? p.data.exclude_schedules : (Array.isArray(p.data?.suppression_sillons) ? p.data.suppression_sillons : (Array.isArray(p.data?.sillons) ? p.data.sillons : []));
+            // Normaliser les valeurs pour éviter mismatch string/number
+            const sel = Array.isArray(rawSel) ? rawSel.map(v => (typeof v === 'string' ? v.trim() : v)) : [];
+            if(sel.length && sel.some(x => String(x) === String(base.id))){
+              cancelled = true;
+              cancel_cause = p.cause || p.titre || p.description || null;
+              break;
+            }
           }
         }
 

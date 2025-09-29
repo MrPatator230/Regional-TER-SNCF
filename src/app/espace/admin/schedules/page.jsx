@@ -73,7 +73,31 @@ function GeneralForm({state,dispatch,lines,stations}){ const g=state.general; co
     </div>
     <div>
       <label>Type train</label>
-      <WcsInput value={g.trainType} onChange={v=> dispatch({type:'SET_GENERAL',payload:{trainType:v}})} />
+      {/* Récupération des types depuis la région (API dédiée) */}
+      {
+        (()=>{
+          // charger la liste depuis le fichier public /img/type/data.json (clé `logos`)
+          const { data: rawTypes, loaded: typesLoaded } = useFetchOnce('/img/type/data.json', j=> j.logos || []);
+          const trainTypes = (rawTypes||[]).map(l=> ({ slug: l.slug || l.file || l.path || '', name: l.name || l.label || l.slug || l.file || '' }));
+          const normalize = s => String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+          const selectedValue = (() => {
+            if(!typesLoaded || !trainTypes.length) return g.trainType || '';
+            if(!g.trainType) return '';
+            const norm = normalize(g.trainType);
+            const match = trainTypes.find(t => normalize(t.slug) === norm || normalize(t.name) === norm);
+            return match ? (match.slug || match.name) : (g.trainType || '');
+          })();
+          if(typesLoaded && Array.isArray(trainTypes) && trainTypes.length){
+            return (
+              <WcsSelect value={selectedValue} onChange={v=> dispatch({type:'SET_GENERAL',payload:{trainType:v}})}>
+                <wcs-select-option value="">(Sélectionner)</wcs-select-option>
+                {trainTypes.map(t=> <wcs-select-option key={(t.slug||t.name)} value={t.slug||t.name}>{t.name||t.slug}</wcs-select-option>)}
+              </WcsSelect>
+            );
+          }
+           // Fallback text input si la liste n'est pas disponible
+           return <WcsInput value={g.trainType} onChange={v=> dispatch({type:'SET_GENERAL',payload:{trainType:v}})} />;
+        })() }
     </div>
     {/* Champ Matériel roulant déplacé vers l’onglet dédié */}
   </div>

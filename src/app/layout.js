@@ -2,12 +2,10 @@ import "./globals.css";
 import "wcs-core/dist/wcs/wcs.css";
 import "wcs-core/design-tokens/dist/sncf-voyageurs.css";
 import "@sncf/bootstrap-sncf.communication/dist/bootstrap-sncf.css";
-import "@sncf/bootstrap-sncf.communication/dist/bootstrap-sncf.darkmode.css";
 import "@sncf/bootstrap-sncf.metier/dist/bootstrap-sncf.min.css";
 
 import React from "react";
 import WcsSetup from "./wcs-setup";
-import ThemeManager from "./components/ThemeManager.jsx";
 import FooterGlobal from "./components/FooterGlobal.jsx";
 import {achemineFont} from "@/fonts/achemine";
 
@@ -29,14 +27,9 @@ export default function RootLayout({ children }) {
           }}
         />
         <link href="/css/bootstrap-sncf.min.css" rel="stylesheet" id={"light"} />
-        <link
-          href="/css/bootstrap-sncf.darkmode.min.css"
-          rel="stylesheet"
-          id={"dark"}
-        />
+
       </head>
       <body className="sncf-voyageurs" >
-        <ThemeManager />
 
         <WcsSetup />
         {children}

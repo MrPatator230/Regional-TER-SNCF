@@ -28,7 +28,46 @@ async function getTrainTypesFromRegionData() {
   }
 }
 
-function parseStopsJson(raw){ if(!raw) return []; try { const arr = typeof raw==='string'? JSON.parse(raw): raw; if(!Array.isArray(arr)) return []; return arr.map(s=>({ station_name: s.station_name||s.station, arrival_time:(s.arrival_time||s.arrival||'')?.slice(0,5)||null, departure_time:(s.departure_time||s.departure||'')?.slice(0,5)||null })); } catch { return []; } }
+function parseStopsJson(raw){
+  if(!raw) return [];
+  try {
+    const data = typeof raw==='string'? JSON.parse(raw): raw;
+    if(Array.isArray(data)) {
+      // Ancien format : simple tableau
+      return data.map(s=>({
+        station_name: s.station_name||s.station,
+        arrival_time:(s.arrival_time||s.arrival||'')?.slice(0,5)||null,
+        departure_time:(s.departure_time||s.departure||'')?.slice(0,5)||null
+      }));
+    } else if(data && typeof data==='object' && ('Origine' in data || 'Terminus' in data)) {
+      // Nouveau format hiérarchique
+      const stops = [];
+      if(data.Origine) stops.push({
+        station_name: data.Origine.station_name||data.Origine.station,
+        arrival_time: (data.Origine.arrival_time||data.Origine.arrival||'')?.slice(0,5)||null,
+        departure_time: (data.Origine.departure_time||data.Origine.departure||'')?.slice(0,5)||null
+      });
+      if(Array.isArray(data.Desservies)) {
+        for(const s of data.Desservies) {
+          stops.push({
+            station_name: s.station_name||s.station,
+            arrival_time:(s.arrival_time||s.arrival||'')?.slice(0,5)||null,
+            departure_time:(s.departure_time||s.departure||'')?.slice(0,5)||null
+          });
+        }
+      }
+      if(data.Terminus && (!stops.length || (stops[stops.length-1].station_name !== (data.Terminus.station_name||data.Terminus.station)))) {
+        stops.push({
+          station_name: data.Terminus.station_name||data.Terminus.station,
+          arrival_time: (data.Terminus.arrival_time||data.Terminus.arrival||'')?.slice(0,5)||null,
+          departure_time: (data.Terminus.departure_time||data.Terminus.departure||'')?.slice(0,5)||null
+        });
+      }
+      return stops;
+    }
+    return [];
+  } catch { return []; }
+}
 
 export async function GET(req){
   try {
@@ -43,6 +82,8 @@ export async function GET(req){
     const [st] = await query('SELECT id, name FROM stations WHERE name=? LIMIT 1',[gareName]);
     if(!st) return NextResponse.json({ error:'Gare inconnue' }, { status:404 });
 
+    // Nouvelle requête : inclure aussi les sillons où la gare est desservie
+    const likeParam = `"${st.name}"`;
     const rows = await scheduleQuery(`SELECT s.id, s.train_number, s.train_type,
         ds.name AS departure_station, as2.name AS arrival_station,
         DATE_FORMAT(s.departure_time, "%H:%i") AS departure_time,
@@ -51,17 +92,27 @@ export async function GET(req){
       FROM schedules s
       JOIN stations ds  ON ds.id  = s.departure_station_id
       JOIN stations as2 ON as2.id = s.arrival_station_id
-      WHERE s.arrival_station_id=?
-      ORDER BY s.arrival_time ASC`, [st.id]);
+      WHERE (s.arrival_station_id=? OR s.stops_json LIKE ?)
+      ORDER BY s.arrival_time ASC`, [st.id, `%${likeParam}%`]);
 
-    const future = rows.filter(r=> r.arrival_time >= nowHM);
-    const list = (future.length? future : rows).slice(0,10).map(r=>{
+    // Pour chaque sillon, déterminer l'heure pertinente pour la gare demandée
+    const list = rows.map(r => {
       const stops = parseStopsJson(r.stops_json);
+      let horaire_afficheur = null;
+      if (r.arrival_station === st.name) {
+        // Terminus
+        horaire_afficheur = r.arrival_time;
+      } else if (r.departure_station === st.name) {
+        // Origine
+        horaire_afficheur = r.departure_time;
+      } else {
+        // Desservie
+        const stop = stops.find(s => s.station_name === st.name);
+        horaire_afficheur = stop?.arrival_time || stop?.departure_time || null;
+      }
       const voie = (parseInt(r.train_number,10)||0)%2? '1':'2';
-      const mid = stops.filter(s=> s.station_name && s.station_name!==r.departure_station && s.station_name!==r.arrival_station).map(s=> s.station_name);
       const trainType = r.train_type || 'TER';
       const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg';
-
       return {
         id: r.id,
         number: r.train_number,
@@ -69,11 +120,12 @@ export async function GET(req){
         logo: logoPath,
         arrival_time: r.arrival_time,
         origin_station: r.departure_station,
-        stops: mid,
+        stops: stops.map(s=>s.station_name),
+        horaire_afficheur,
         voie,
         status: 'A L\'HEURE'
       };
-    });
+    }).filter(r => r.horaire_afficheur).slice(0,10);
     return NextResponse.json({ gare: gareName, arrivals: list });
   } catch(e){
     console.error('GET /api/afficheurs/classiques/arrivees', e);

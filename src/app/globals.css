@@ -95,6 +95,14 @@
   /* Largeurs des colonnes du planner (héros) */
   --planner-left-col: 520px; /* largeur du bloc de recherche */
   --planner-right-col: 350px; /* largeur colonne info */
+  /* Affinement visuel: tailles et poids pour l'afficheur */
+  --dep-time-size: 48px;
+  --dep-time-size-lg: 64px;
+  --dep-dest-size: 64px;
+  --dep-dest-size-lg: 92px;
+  --dep-row-height: 96px;
+  --dep-blue-1: #0b62a3; /* bande claire */
+  --dep-blue-2: #063b73; /* bande foncée */
 }
 
 body {
@@ -645,3 +653,78 @@ body {
 .list-nav button.linklike { font-size:.7rem; }
 /* Nettoyage anciens styles si présents (facultatif) */
 .journey-row { display:none; }
+
+/* Raffinements pour l'afficheur classique */
+.departures-display { position: relative; }
+.dep-logo { width:56px; height:auto; }
+.dep-meta { min-width:120px; }
+.dep-status { font-size:16px; letter-spacing:0.2px; }
+.dep-time { font-family: 'Avenir', sans-serif; }
+
+/* sous-étapes avec pastilles jaunes */
+.dep-sub { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.sub-item { color: rgba(255,255,255,0.85); font-size:18px; display:inline-flex; align-items:center; gap:8px; }
+.sub-dot { color: var(--sncf-yellow); font-weight:900; margin:0 6px; }
+
+/* Boîte voie : contour blanc arrondi + intérieur foncé */
+.platform-outer { border-radius:10px; padding:6px; border:3px solid rgba(255,255,255,0.95); background: rgba(255,255,255,0.06); display:inline-flex; align-items:center; justify-content:center; }
+.platform-inner { background:#063b73; color:#fff; padding:4px 10px; border-radius:6px; font-weight:800; font-size:28px; min-width:40px; text-align:center; }
+
+/* Lien discret de navigation (chevron) au-dessus */
+.dep-link { right: 18px; top: 50%; transform: translateY(-50%); position: absolute; z-index: 5; background: transparent; border: none; color: rgba(255,255,255,0.95); }
+.dep-link wcs-mat-icon { font-size:28px; }
+
+/* Ajustements pour la destination */
+.dep-destination { font-family: 'Avenir', sans-serif; font-weight:900; }
+
+/* Petite amélioration pour la bande watermark (écrasement sur la droite) */
+.departures-watermark { pointer-events:none; z-index:0; }
+.departures-display > * { position: relative; z-index:2; }
+
+/* safe small-screen tweaks */
+@media (max-width:480px){ .dep-destination { font-size:22px; } .dep-time { font-size:28px; } .platform-inner { font-size:18px; padding:4px 8px; } }
+
+/* Affinement visuel: tailles et poids pour l'afficheur */
+:root {
+  --dep-time-size: 48px;
+  --dep-time-size-lg: 64px;
+  --dep-dest-size: 64px;
+  --dep-dest-size-lg: 92px;
+  --dep-row-height: 96px;
+  --dep-blue-1: #0b62a3; /* bande claire */
+  --dep-blue-2: #063b73; /* bande foncée */
+}
+
+.dep-row { min-height: var(--dep-row-height); padding: 20px 30px; }
+.dep-row:nth-child(odd){ background: var(--dep-blue-1); }
+.dep-row:nth-child(even){ background: var(--dep-blue-2); }
+
+.dep-time { font-size: var(--dep-time-size); color: var(--sncf-yellow); font-weight:900; }
+@media(min-width:1200px){ .dep-time { font-size: var(--dep-time-size-lg); } }
+
+a .dep-time, .dep-time strong { color: var(--sncf-yellow); }
+
+.dep-destination { font-size: var(--dep-dest-size); font-weight:900; color: #fff; }
+@media(min-width:1200px){ .dep-destination { font-size: var(--dep-dest-size-lg); } }
+
+/* Watermark plus grand et positionné exactement comme sur la maquette */
+.departures-watermark span { font-size: 180px; opacity:0.06; letter-spacing:8px; font-weight:900; }
+@media(min-width:1200px){ .departures-watermark span { font-size: 220px; } }
+
+/* Ticker: police plus grande et espacement */
+.dep-ticker { padding: 18px 22px; }
+.dep-ticker .msg { font-size: 28px; font-weight:800; color: #083b73; }
+.dep-ticker .clock { font-size: 24px; padding:10px 16px; border-radius:8px; }
+
+/* Plateforme: carré arrondi blanc + intérieur foncé plus grand */
+.platform-outer { padding:8px; border-radius:12px; border:4px solid rgba(255,255,255,0.95); }
+.platform-inner { font-size:34px; padding:6px 14px; border-radius:8px; }
+
+/* Forcer Avenir Black pour destination si disponible */
+.dep-destination { font-family: 'Avenir', sans-serif; font-weight:900; }
+
+/* réduire l'encombrement des sous-étapes pour grande maquette */
+.sub-item { font-size:20px; color: rgba(255,255,255,0.8); }
+
+/* garder lien chevron cliquable mais non intrusif */
+.dep-link { background: rgba(255,255,255,0.03); width:48px; height:48px; border-radius:8px; display:flex; align-items:center; justify-content:center; }

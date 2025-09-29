@@ -10,6 +10,7 @@ export default function AdminAfficheursPage(){
     if(!gare.trim()) return;
     let base = `/afficheurs/${type}`;
     if(type==='classiques'){ base += `/${sens}`; }
+    else if(type==='eva'){ base += `/arrivees`; }
     // futurs autres types: AFL / Transilien pourront avoir une structure différente
     const url = `${base}?gare=${encodeURIComponent(gare.trim())}`;
     window.open(url, '_blank');
@@ -22,6 +23,7 @@ export default function AdminAfficheursPage(){
         <wcs-form-field label="Type d'afficheur">
           <div style={{display:'flex', gap:'16px', flexWrap:'wrap'}}>
             <label><input type="radio" name="type" value="classiques" checked={type==='classiques'} onChange={()=>setType('classiques')} /> Classiques</label>
+            <label><input type="radio" name="type" value="eva" checked={type==='eva'} onChange={()=>setType('eva')} /> EVA</label>
             <label style={{opacity:.5}}><input type="radio" name="type" value="afl" disabled /> AFL (à venir)</label>
             <label style={{opacity:.5}}><input type="radio" name="type" value="transilien" disabled /> Transilien (à venir)</label>
           </div>
@@ -42,4 +44,3 @@ export default function AdminAfficheursPage(){
     </div>
   );
 }
-

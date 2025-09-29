@@ -3,470 +3,138 @@ import React, { useEffect, useState } from "react";
 import Header from "@/app/components/Header";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { platformForStation } from '@/app/utils/platform';
 import { usePerturbations } from '@/app/hooks/usePerturbations';
-import PerturbationBanner from '@/app/components/PerturbationBanner';
 
-export default function BoardPage(){
+export default function BoardPage() {
   const { id } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
   const typeParam = (searchParams.get("type") || "departures").toLowerCase();
   const [type, setType] = useState(typeParam === "arrivals" ? "arrivals" : "departures");
-  const [data, setData] = useState(null); // {station,{days:[]}}
-  // Nouveaux états pour expansion & session & détails
-  const [openId, setOpenId] = useState(null); // schedule ouvert
-  const [details, setDetails] = useState({}); // id -> {loading, schedule}
-  const [session, setSession] = useState(null);
-  const [favorites, setFavorites] = useState([]); // schedule_id[]
-  const [selectedArrivalMap, setSelectedArrivalMap] = useState({}); // scheduleId -> arrival station
-  const [marked, setMarked] = useState(new Set()); // multi sélection
-  const [showGoCart, setShowGoCart] = useState(false);
-  // Etats individuels par horaire: scheduleId -> { passengers, card }
-  const [forms, setForms] = useState({});
-  const getForm = (id)=> forms[id] || { passengers:1, card:'none' };
-  const updateForm = (id, patch)=> setForms(f=> ({ ...f, [id]: { ...getForm(id), ...patch } }));
-  // Etats manquants réintroduits
-  const [choosing, setChoosing] = useState(false);
-  const [addedIds, setAddedIds] = useState(new Set());
-  // Voies synchronisées par horaire (schedule_id -> platform)
-  const [platformsBySchedule, setPlatformsBySchedule] = useState({});
-  // Utilisation du hook pour les perturbations
-  const { loading: loadingPerturbations, getPerturbationsForLine } = usePerturbations();
-
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // sélection se fait par paire scheduleId + date (ex: '1234_2025-09-19')
+  const [selectedScheduleKey, setSelectedScheduleKey] = useState(null);
 
-  // Quand le query param change
+  // Récupération des perturbations côté client (pour afficher la carte d'info par ligne)
+  const { getPerturbationsForLine, perturbations } = usePerturbations();
+
+  // Ajout d'un état pour suivre les perturbations globales
+  const [perturbationsTick, setPerturbationsTick] = useState(0);
+
   useEffect(() => {
     setType(typeParam === "arrivals" ? "arrivals" : "departures");
   }, [typeParam]);
 
+  // Écouteur global pour recharger les sillons lorsque les perturbations changent
+  useEffect(() => {
+    function onUpdate() {
+      setPerturbationsTick((t) => t + 1);
+    }
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('perturbations:updated', onUpdate);
+      return () => window.removeEventListener('perturbations:updated', onUpdate);
+    }
+    return undefined;
+  }, []);
+
+  // Recharger les sillons en fonction des perturbations
   useEffect(() => {
     let aborted = false;
     async function load() {
-      setLoading(true); setError(null);
+      setLoading(true);
+      setError(null);
       try {
         const res = await fetch(`/api/public/stations/${id}/board?type=${type}&days=2`, { cache: "no-store" });
-        if(res.status===410){ if(!aborted) { setError('Sillons en refonte — horaires indisponibles'); setData(null); } return; }
+        if (res.status === 410) {
+          if (!aborted) {
+            setError("Sillons en refonte — horaires indisponibles");
+            setData(null);
+          }
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        // Filtrage client supplémentaire (sécurité) sur days_mask
-        const filteredDays = (json.days||[]).map(day => {
-          const runs = (s)=> {
-            if(s.days_mask==null) return true; // si absent, on conserve
-            const d = new Date(day.date+"T00:00:00"); if(isNaN(d)) return true;
-            const idx = (d.getDay()+6)%7; // lundi=0
-            return (s.days_mask & (1<<idx)) !== 0;
-          };
-            return { ...day, schedules: (day.schedules||[]).filter(runs) };
-        });
-        json.days = filteredDays;
         if (!aborted) setData(json);
       } catch (e) {
         if (!aborted) setError("Impossible de charger les horaires.");
-      } finally { if (!aborted) setLoading(false); }
+      } finally {
+        if (!aborted) setLoading(false);
+      }
     }
     load();
-    return () => { aborted = true; };
-  }, [id, type]);
+    return () => {
+      aborted = true;
+    };
+  }, [id, type, perturbationsTick]);
 
+  // Ajout d'une fonction pour récupérer les perturbations des sillons par jour
+  const enrichSillonsWithDailyPerturbations = (sillons, perturbations) => {
+    if (!Array.isArray(sillons) || !sillons.length) return sillons || [];
+    if (!Array.isArray(perturbations) || !perturbations.length) return sillons;
+    return sillons.map((sillon) => {
+      const sId = Number(sillon.id);
+      const sDate = String(sillon.date || '').slice(0,10);
+      const perturbation = perturbations.find((p) => {
+        const pSid = Number(p.schedule_id ?? p.sillon_id ?? p.sillonId ?? p.sillonId);
+        const pDate = p.date ? String(p.date).slice(0,10) : null;
+        return pSid && sId && pSid === sId && pDate && sDate && pDate === sDate;
+      });
+      if (perturbation) {
+        const isSupp = String(perturbation.type || '').toLowerCase() === 'suppression' || String(perturbation.type || '').toLowerCase() === 'supprimé';
+        const isDelay = String(perturbation.type || '').toLowerCase() === 'retard';
+        return {
+          ...sillon,
+          // flag utilisé par le rendu
+          cancelled: isSupp || !!sillon.cancelled,
+          // définir les deux variantes de nommage utilisées dans l'app
+          delay_minutes: (perturbation.delay_minutes != null ? Number(perturbation.delay_minutes) : (sillon.delay_minutes != null ? Number(sillon.delay_minutes) : (sillon.delay_min != null ? Number(sillon.delay_min) : 0))),
+          delay_min: (perturbation.delay_minutes != null ? Number(perturbation.delay_minutes) : (sillon.delay_min != null ? Number(sillon.delay_min) : (sillon.delay_minutes != null ? Number(sillon.delay_minutes) : 0))),
+          delay_cause: perturbation.cause || perturbation.message || sillon.delay_cause || null,
+          cancel_message: perturbation.message || perturbation.cause || sillon.cancel_message || null,
+          // legacy status field (ne pas casser les usages existants)
+          status: isSupp ? 'supprimé' : (isDelay ? 'retard' : (sillon.status || null)),
+        };
+      }
+      return sillon;
+    });
+  };
+
+  // Synchronisation des schedules (data.days[].schedules) avec les perturbations quotidiennes
   useEffect(() => {
-    fetch('/api/public/session').then(r=>r.json()).then(j=> setSession(j.user || null)).catch(()=>{});
-    fetch('/api/public/favorites').then(r=>r.json()).then(j=> setFavorites(j.favorites||[])).catch(()=>{});
-  }, []);
+    if (!data || !Array.isArray(data.days) || !data.days.length) return;
+    if (!Array.isArray(perturbations) || !perturbations.length) return;
+
+    let changed = false;
+    const newDays = data.days.map(day => {
+      const origSchedules = Array.isArray(day.schedules) ? day.schedules : [];
+      const enriched = enrichSillonsWithDailyPerturbations(origSchedules, perturbations);
+      // simple comparaison JSON pour détecter changement (suffisant pour petites listes)
+      try{
+        if (JSON.stringify(enriched) !== JSON.stringify(origSchedules)) changed = true;
+      }catch(e){ /* ignore stringify errors */ }
+      return { ...day, schedules: enriched };
+    });
+
+    if (changed) {
+      setData(prev => ({ ...prev, days: newDays }));
+    }
+  }, [perturbations, data?.days]);
 
   const titre = type === "departures" ? "Prochains départs" : "Prochaines arrivées";
 
-  function onToggle(newType) {
-    // Mettre à jour l'état local immédiatement
-    setType(newType === "arrivals" ? "arrivals" : "departures");
-    // Puis mettre à jour l'URL pour la persistance
-    router.push(`/se-deplacer/prochains-departs/${id}?type=${newType}`);
-    // Réinitialiser les états d'expansion
-    setOpenId(null);
-    setDetails({});
-  }
-
-  const days = data?.days || [];
-
-  const formatDate = (iso) => {
+  const formatDate = (isoDate) => {
     try {
-      const raw = new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
-      return raw.charAt(0).toUpperCase() + raw.slice(1); // Capitalise uniquement la première lettre (jour), conserve le mois en minuscule
-    } catch { return iso; }
-  };
-
-  const toggleSchedule = async (sched, stationName, compoundId, dayDate) => {
-    if (openId === compoundId) { setOpenId(null); return; }
-    setOpenId(compoundId);
-    if (!details[compoundId]) {
-      setDetails(d => ({...d, [compoundId]: { loading: true, schedule: null }}));
-      try {
-        // 1. Si un nouveau parcours (reroute) est déjà fourni par le board (schedule_overrides), on l'utilise en priorité.
-        if(sched.reroute && Array.isArray(sched.reroute.stops) && sched.reroute.stops.length){
-          const stops = sched.reroute.stops.map(st=> ({
-            station_name: st.station || st.station_name || '',
-            time: st.departure || st.arrival || '',
-            arrival_time: st.arrival || '',
-            departure_time: st.departure || '',
-            platform: st.platform || st.voie || st.track || st.platform_code || null
-          }));
-          const boardIndex = stops.findIndex(s=> s.station_name.toLowerCase() === stationName.toLowerCase());
-          const scheduleObj = {
-            id: sched.id,
-            train_type: sched.train_type || '',
-            train_number: sched.train_number || '',
-            operator: 'SNCF Voyageurs',
-            info: sched.info || (sched.rerouted? 'Parcours modifié' : ''),
-            board_index: boardIndex >=0 ? boardIndex : 0,
-            stops,
-            delay_min: sched.delay_min || null,
-            delay_cause: sched.delay_cause || null,
-            rerouted: true,
-            cancelled: !!sched.cancelled,
-            original_stops: Array.isArray(sched.original_stops)? sched.original_stops: null,
-            original_stops_detailed: Array.isArray(sched.original_stops_detailed)? sched.original_stops_detailed: null,
-            original_destination: sched.original_destination,
-            original_origin: sched.original_origin,
-            new_destination: sched.destination,
-            new_origin: sched.origin,
-            schedule_departure_time: (stops[0]?.departure_time || stops[0]?.time || null) // heure départ origine
-          };
-          setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj }}));
-          // Mémorise la voie pour la gare courante si disponible
-          const currentStop = stops.find(st => normalizeStation(st.station_name||'') === normalizeStation(stationName||''));
-          if(currentStop && currentStop.platform){
-            setPlatformsBySchedule(m => ({ ...m, [sched.id]: currentStop.platform }));
-          }
-          return; // pas de fetch journeys nécessaire
-        }
-        // Construire l'URL journeys: on cherche le trajet complet entre la gare affichée et la destination finale
-        const from = stationName;
-        const to = type === 'departures' ? sched.destination : sched.origin;
-        // On fournit time et date pour filtrer, limit raisonnable
-        const url = `/api/public/journeys?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&time=${encodeURIComponent(sched.time)}&date=${encodeURIComponent(dayDate)}&limit=10`;
-        const res = await fetch(url);
-        if(res.status===410){
-          // Fallback vers les arrêts du sillon brut
-          try {
-            const r2 = await fetch(`/api/public/schedules/${sched.id}`);
-            if (r2.ok) {
-              const j2 = await r2.json();
-              const stops2 = (j2.stops||[]).map(st => ({
-                station_name: st.station_name || st.station || '',
-                time: st.departure_time || st.arrival_time || st.time || null,
-                arrival_time: st.arrival_time || null,
-                departure_time: st.departure_time || null,
-                platform: st.platform || st.voie || st.track || st.platform_code || null
-              }));
-              const boardIndex2 = stops2.findIndex(s=> (s.station_name||'').toLowerCase() === from.toLowerCase());
-              const scheduleObj2 = {
-                id: sched.id,
-                train_type: sched.train_type || j2.train_type || '',
-                train_number: sched.train_number || j2.train_number || '',
-                operator: 'SNCF Voyageurs',
-                info: sched.info || '',
-                board_index: boardIndex2 >=0 ? boardIndex2 : 0,
-                stops: stops2,
-                delay_min: sched.delay_min || null,
-                delay_cause: sched.delay_cause || null,
-                cancelled: !!sched.cancelled,
-                schedule_departure_time: (stops2[0]?.departure_time || stops2[0]?.time || null)
-              };
-              setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj2 }}));
-              const currentStop2 = stops2.find(st => normalizeStation(st.station_name||'') === normalizeStation(from||''));
-              if(currentStop2 && currentStop2.platform){
-                setPlatformsBySchedule(m => ({ ...m, [sched.id]: currentStop2.platform }));
-              }
-              return;
-            }
-          } catch(_) {}
-          setDetails(d => ({...d, [compoundId]: { loading: false, schedule: null }}));
-          return;
-        }
-        const json = await res.json();
-        let item = null;
-        if(Array.isArray(json.items)) {
-            item = json.items.find(i=> i.scheduleId === sched.id) || json.items.find(i=> i.trainNumber === sched.train_number && i.departure === sched.time);
-        }
-        if(!item) {
-          // Fallback vers les arrêts du sillon brut si aucun item pertinant
-          try {
-            const r2 = await fetch(`/api/public/schedules/${sched.id}`);
-            if (r2.ok) {
-              const j2 = await r2.json();
-              const stops2 = (j2.stops||[]).map(st => ({
-                station_name: st.station_name || st.station || '',
-                time: st.departure_time || st.arrival_time || st.time || null,
-                arrival_time: st.arrival_time || null,
-                departure_time: st.departure_time || null,
-                platform: st.platform || st.voie || st.track || st.platform_code || null
-              }));
-              const boardIndex2 = stops2.findIndex(s=> (s.station_name||'').toLowerCase() === from.toLowerCase());
-              const scheduleObj2 = {
-                id: sched.id,
-                train_type: sched.train_type || j2.train_type || '',
-                train_number: sched.train_number || j2.train_number || '',
-                operator: 'SNCF Voyageurs',
-                info: sched.info || '',
-                board_index: boardIndex2 >=0 ? boardIndex2 : 0,
-                stops: stops2,
-                delay_min: sched.delay_min || null,
-                delay_cause: sched.delay_cause || null,
-                cancelled: !!sched.cancelled,
-                schedule_departure_time: (stops2[0]?.departure_time || stops2[0]?.time || null)
-              };
-              setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj2 }}));
-              const currentStop2 = stops2.find(st => normalizeStation(st.station_name||'') === normalizeStation(from||''));
-              if(currentStop2 && currentStop2.platform){
-                setPlatformsBySchedule(m => ({ ...m, [sched.id]: currentStop2.platform }));
-              }
-              return;
-            }
-          } catch(_) {}
-          throw new Error('Aucun détail');
-        }
-        const stops = (item.allStops||item.stops||[]).map((st)=>
-          (
-            {
-              station_name: st.station || st.station_name || '',
-              time: st.arrival || st.departure || st.time || null,
-              arrival_time: st.arrival || null,
-              departure_time: st.departure || null,
-              platform: st.platform || st.voie || st.track || st.platform_code || null
-            }
-          )
-        );
-        // Si journeys ne renvoie qu'un tronçon (ex: depuis la gare du tableau), compléter avec le sillon complet
-        let finalStops = stops;
-        try {
-          const originName = (sched.origin || item.origin || '').toLowerCase();
-          const destName = (sched.destination || item.destination || '').toLowerCase();
-          const firstName = (stops[0]?.station_name || '').toLowerCase();
-          const lastName = (stops[stops.length-1]?.station_name || '').toLowerCase();
-          const isFull = stops.length>0 && firstName === originName && lastName === destName;
-          if(!isFull){
-            const rFull = await fetch(`/api/public/schedules/${sched.id}`);
-            if(rFull.ok){
-              const jFull = await rFull.json();
-              const full = (jFull.stops||[]).map(st=> ({
-                station_name: st.station_name || st.station || '',
-                time: st.departure_time || st.arrival_time || st.time || null,
-                arrival_time: st.arrival_time || null,
-                departure_time: st.departure_time || null,
-                platform: st.platform || st.voie || st.track || st.platform_code || null
-              }));
-              if(full.length){ finalStops = full; }
-            }
-          }
-        } catch(_) {}
-        const boardIndex = finalStops.findIndex(s=> s.station_name.toLowerCase() === from.toLowerCase());
-        const scheduleObj = {
-          id: sched.id,
-            train_type: sched.train_type || item.trainType || '',
-            train_number: sched.train_number || item.trainNumber || '',
-            operator: 'SNCF Voyageurs',
-            info: (()=> { const disruptions = item.disruptions || item.perturbations || item.alerts || []; const disruptMsg = Array.isArray(disruptions)? disruptions.map(d=> d.message || d.text || d.label || d.title).filter(Boolean).join(' \n'):''; return disruptMsg || item.info || sched.info || ''; })(),
-            board_index: boardIndex >=0 ? boardIndex : 0,
-            stops: finalStops,
-            delay_min: sched.delay_min || null,
-            delay_cause: sched.delay_cause || null,
-            cancelled: !!sched.cancelled,
-            schedule_departure_time: (finalStops[0]?.departure_time || finalStops[0]?.time || null)
-        };
-        setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj }}));
-        // Mémorise la voie pour la gare courante si disponible
-        const currentStop = finalStops.find(st => normalizeStation(st.station_name||'') === normalizeStation(from||''));
-        if(currentStop && currentStop.platform){
-          setPlatformsBySchedule(m => ({ ...m, [sched.id]: currentStop.platform }));
-        }
-      } catch(e) {
-        // Dernier filet de sécurité: tenter encore le sillon brut
-        try {
-          const r2 = await fetch(`/api/public/schedules/${sched.id}`);
-          if (r2.ok) {
-            const j2 = await r2.json();
-            const stops2 = (j2.stops||[]).map(st => ({
-              station_name: st.station_name || st.station || '',
-              time: st.departure_time || st.arrival_time || st.time || null,
-              arrival_time: st.arrival_time || null,
-              departure_time: st.departure_time || null,
-              platform: st.platform || st.voie || st.track || st.platform_code || null
-            }));
-            const boardIndex2 = stops2.findIndex(s=> (s.station_name||'').toLowerCase() === stationName.toLowerCase());
-            const scheduleObj2 = {
-              id: sched.id,
-              train_type: sched.train_type || j2.train_type || '',
-              train_number: sched.train_number || j2.train_number || '',
-              operator: 'SNCF Voyageurs',
-              info: sched.info || '',
-              board_index: boardIndex2 >=0 ? boardIndex2 : 0,
-              stops: stops2,
-              delay_min: sched.delay_min || null,
-              delay_cause: sched.delay_cause || null,
-              cancelled: !!sched.cancelled,
-              schedule_departure_time: (stops2[0]?.departure_time || stops2[0]?.time || null)
-            };
-            setDetails(d => ({...d, [compoundId]: { loading: false, schedule: scheduleObj2 }}));
-            const currentStop2 = stops2.find(st => normalizeStation(st.station_name||'') === normalizeStation(stationName||''));
-            if(currentStop2 && currentStop2.platform){
-              setPlatformsBySchedule(m => ({ ...m, [sched.id]: currentStop2.platform }));
-            }
-            return;
-          }
-        } catch(_) {}
-        setDetails(d => ({...d, [compoundId]: { loading: false, schedule: null }}));
-      }
+      const date = new Date(isoDate);
+      return date.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+      });
+    } catch {
+      return isoDate;
     }
-  };
-
-  const canBuy = session && session.role === 'client';
-  const addToCart = async (sched) => {
-    if (!canBuy) { if (!session) router.push('/se-connecter'); else alert('Fonction réservée aux clients.'); return; }
-    const selectedArrival = selectedArrivalMap[sched.id];
-    if (!selectedArrival) { alert('Sélectionnez une gare d\'arrivée.'); return; }
-    const { passengers, card } = getForm(sched.id);
-    try {
-      setChoosing(true);
-      const res = await fetch('/api/public/cart', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ schedule_id: sched.id, origin: data.station.name, destination: selectedArrival, passengers, card }) });
-      const j = await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(j.error||'Ajout panier échoué');
-      setAddedIds(prev=> new Set(prev).add(sched.id));
-      window.dispatchEvent(new Event('cart-updated'));
-      setShowGoCart(true);
-    } catch(e) { alert(e.message||'Erreur'); }
-    finally { setChoosing(false); }
-  };
-
-  const bulkAdd = async () => {
-    if (!canBuy) { if (!session) router.push('/se-connecter'); else alert('Fonction réservée aux clients.'); return; }
-    const ready = Array.from(marked).filter(id => selectedArrivalMap[id] && !addedIds.has(id));
-    if (!ready.length) { alert('Sélectionnez au moins un horaire et une gare d\'arrivée.'); return; }
-    setChoosing(true);
-    try {
-      for (const idSched of ready) {
-        const arrival = selectedArrivalMap[idSched];
-        const { passengers, card } = getForm(idSched);
-        const res = await fetch('/api/public/cart', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ schedule_id: idSched, origin: data.station.name, destination: arrival, passengers, card }) });
-        if (res.ok) {
-          setAddedIds(prev=> new Set(prev).add(idSched));
-        }
-      }
-      window.dispatchEvent(new Event('cart-updated'));
-      setShowGoCart(true);
-    } finally {
-      setChoosing(false);
-    }
-  };
-
-  const toggleMark = (id) => {
-    setMarked(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
-    });
-  };
-
-  const toggleFavorite = (schedule_id, isFav) => {
-    if(!session) { router.push('/se-connecter'); return; }
-    const method = isFav ? 'DELETE':'POST';
-    fetch('/api/public/favorites', { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ schedule_id }) })
-      .then(r=>r.json()).then(()=>{
-        setFavorites(f=> isFav ? f.filter(id=>id!==schedule_id) : [...f, schedule_id]);
-      }).catch(()=>{});
-  };
-
-  const addMinutes = (hhmm, mins) => {
-    if(!hhmm || typeof mins !== 'number') return hhmm;
-    const [h,m] = hhmm.split(':').map(n=>parseInt(n,10));
-    if(isNaN(h)||isNaN(m)) return hhmm;
-    const date = new Date(0,0,1,h,m,0,0);
-    date.setMinutes(date.getMinutes()+mins);
-    return String(date.getHours()).padStart(2,'0')+':'+String(date.getMinutes()).padStart(2,'0');
-  };
-
-  const formatTrainType = (t) => {
-    if(!t) return '';
-    const norm = (t+'' ).trim().toUpperCase();
-    if(norm === 'SNCF-VOYAGEURS-LOGO') return 'TER';
-    return norm;
-  };
-
-  // Normalisation robuste des noms de gares (ex: "Dijon-Ville" ≈ "Dijon")
-  const normalizeStation = (name) => {
-    if(!name) return '';
-    let s = (name+"").normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    s = s.trim().toLowerCase();
-    // Supprime suffixes courants
-    s = s.replace(/[- ]?ville$/,'');
-    // Compacte
-    s = s.replace(/[^a-z0-9]/g,'');
-    return s;
-  };
-  const findStationIndex = (stops, name) => {
-    const key = normalizeStation(name);
-    if(!key) return -1;
-    return (stops||[]).findIndex(st => normalizeStation(st.station_name) === key);
-  };
-
-  // Détermine les libellés d'origine et de destination à afficher (préférence aux valeurs reroutées)
-  const getEndpointLabels = (schedDet, sLite) => {
-    const originNew = schedDet?.new_origin || sLite?.new_origin || null;
-    const destNew = schedDet?.new_destination || sLite?.new_destination || null;
-    const originOrig = schedDet?.original_origin || sLite?.original_origin || schedDet?.origin || sLite?.origin || '';
-    const destOrig = schedDet?.original_destination || sLite?.original_destination || schedDet?.destination || sLite?.destination || '';
-    const originLabel = originNew || originOrig || '';
-    const destLabel = destNew || destOrig || '';
-    return {
-      originLabel,
-      destLabel,
-      originWasChanged: !!(originNew && normalizeStation(originNew) !== normalizeStation(originOrig)),
-      destWasChanged: !!(destNew && normalizeStation(destNew) !== normalizeStation(destOrig))
-    };
-  };
-
-  // Récupère les perturbations à afficher pour un sillon
-  const getPerturbationsForSchedule = (schedule) => {
-    if (!schedule || !schedule.ligne_id) return [];
-
-    // Récupère les perturbations pour la ligne de ce sillon
-    const linePerturbations = linesPerturbations[schedule.ligne_id] || [];
-
-    // Renvoie toutes les perturbations pour cette ligne, sans filtrage supplémentaire
-    return linePerturbations;
-  };
-
-  const filterSchedulesForDisplay = (schedules = []) => {
-    const pickBetter = (a, b) => {
-      // Préfère un sillon rerouté, sinon supprimé, sinon avec info de retard, sinon garde le premier
-      const ar = !!(a && (a.rerouted || a.reroute));
-      const br = !!(b && (b.rerouted || b.reroute));
-      if (ar !== br) return br ? b : a;
-      const ac = !!(a && a.cancelled);
-      const bc = !!(b && b.cancelled);
-      if (ac !== bc) return bc ? b : a;
-      const ad = typeof (a && a.delay_min) === 'number';
-      const bd = typeof (b && b.delay_min) === 'number';
-      if (ad !== bd) return bd ? b : a;
-      // Dernier recours: garder le plus renseigné (info)
-      const ai = (a && (a.info || '')).length;
-      const bi = (b && (b.info || '')).length;
-      if (ai !== bi) return bi > ai ? b : a;
-      return a; // stable
-    };
-
-    const filteredSchedules = {};
-    schedules.forEach((sched) => {
-      const trainNumber = sched.train_number;
-      const dayDate = sched.day_date; // Assurez-vous que cette propriété existe dans les données
-
-      if (!filteredSchedules[trainNumber] || filteredSchedules[trainNumber].day_date < dayDate) {
-        filteredSchedules[trainNumber] = sched;
-      }
-    });
-
-    return Object.values(filteredSchedules);
   };
 
   return (
@@ -474,7 +142,7 @@ export default function BoardPage(){
       <Header />
       <main className="board-wrapper">
         <nav className="pd-breadcrumb" aria-label="Fil d'ariane">
-          <ol>
+          <ol className="breadcrumb-horizontal-left">
             <li><Link href="/" aria-label="Accueil"><wcs-mat-icon icon="home" aria-hidden="true"></wcs-mat-icon></Link></li>
             <li aria-hidden="true">›</li>
             <li><Link href="/se-deplacer/prochains-departs">Prochains départs</Link></li>
@@ -485,652 +153,811 @@ export default function BoardPage(){
 
         <header className="board-header">
           <div>
-            <h1 className="board-title">{titre}</h1>
-            {data?.station?.name && <h2 className="board-station">Gare {data.station.name}</h2>}
-            <div className="board-pills">
-              <button type="button" className={"pill" + (type === "departures" ? " active" : "")} onClick={() => onToggle("departures")} aria-pressed={type === "departures"}>Départs SNCF</button>
-              <button type="button" className={"pill" + (type === "arrivals" ? " active" : "")} onClick={() => onToggle("arrivals")} aria-pressed={type === "arrivals"}>Arrivées SNCF</button>
-            </div>
+            <h1>{titre}</h1>
+            {data?.station?.name && <h2>Gare {data.station.name}</h2>}
           </div>
-          {data?.station?.name && (
-            <div className="board-actions">
-              <Link href="#" className="act-link"><wcs-mat-icon icon="info" aria-hidden="true"></wcs-mat-icon> Infos pratiques {data.station.name}</Link>
-              <Link href="/se-deplacer/prochains-departs" className="act-link"><wcs-mat-icon icon="search" aria-hidden="true"></wcs-mat-icon> Changer de gare</Link>
-            </div>
-          )}
+          <div className="board-actions">
+            <Link href="#" className="act-link">Infos pratiques {data?.station?.name}</Link>
+            <Link href="/se-deplacer/prochains-departs" className="act-link">Changer de gare</Link>
+          </div>
         </header>
 
-        {loading && <div className="board-loading">Chargement…</div>}
-        {error && <div className="board-error" role="alert">{error}</div>}
+        <div className="board-pills">
+          <button type="button" className={type === "departures" ? "active" : ""} onClick={() => router.push(`/se-deplacer/prochains-departs/${id}?type=departures`)}>Départs </button>
+          <button type="button" className={type === "arrivals" ? "active" : ""} onClick={() => router.push(`/se-deplacer/prochains-departs/${id}?type=arrivals`)}>Arrivées </button>
+        </div>
+
+        {loading && <p>Chargement...</p>}
+        {error && <p>{error}</p>}
 
         {!loading && !error && (
-          <div className="board-card" role="table" aria-label={titre}>
-            <div className="board-head" role="rowgroup">
-              <div className="board-row head" role="row">
-                <div role="columnheader" className="col time">{type === "departures" ? "Départ" : "Arrivée"}</div>
-                <div role="columnheader" className="col dest">{type === "departures" ? "Destination" : "Origine"}</div>
-                <div role="columnheader" className="col mode">Mode</div>
-                <div role="columnheader" className="col voie">Voie</div>
-                <div role="columnheader" className="col fav">Favori</div>
-              </div>
+          <div className="board-card">
+            <div className="board-head">
+              <div>{type === "arrivals" ? "Arrivée" : "Départ"}</div>
+              {type === "arrivals" && <div>Provenance</div>}
+              {type !== "arrivals" && <div>Destination</div>}
+              <div>Mode</div>
+              <div>Voie</div>
             </div>
-            <div className="board-body" role="rowgroup">
-              {days.map(day => {
+            <div className="board-body">
+              {data?.days?.map(day => {
+                // Filtrage des horaires selon la date et l'heure
                 const now = new Date();
-                const todayStr = now.toISOString().slice(0,10);
-                const currentTime = now.toTimeString().slice(0,5);
-                const isToday = day.date === todayStr;
-                const visibleSchedules = isToday ? day.schedules.filter(s => (s.time || '') >= currentTime) : day.schedules;
+                const dayDate = new Date(day.date);
+                let filteredSchedules = day.schedules;
+                if (
+                  dayDate.toDateString() === now.toDateString()
+                ) {
+                  // Jour courant : ne garder que les horaires à venir
+                  filteredSchedules = day.schedules.filter(schedule => {
+                    // On suppose que schedule.time est au format "HH:mm"
+                    const [h, m] = schedule.time.split(":");
+                    const scheduleDate = new Date(day.date);
+                    scheduleDate.setHours(Number(h), Number(m), 0, 0);
+                    return scheduleDate >= now;
+                  });
+                }
+                // Jour suivant : on garde tout
                 return (
                   <React.Fragment key={day.date}>
-                    <div className="day-separator" role="row"><div className="day-label">{formatDate(day.date)}</div></div>
-                    {visibleSchedules.length === 0 && (
-                      <div className="board-row empty" role="row"><div className="col time">—</div><div className="col dest">Aucun train</div></div>
-                    )}
-                    {visibleSchedules.map(s => {
-                      const compoundId = `${day.date}::${s.id}`;
-                      // Utiliser explicitement departure_time du premier arrêt (stops[0]) si disponible
-                      const displayTime = s.stops?.[0]?.departure_time || s.time;
-                      const isOpen = openId === compoundId;
-                      const infoText = details[compoundId]?.schedule?.info || s.info || '';
-                      // Perturbations filtrées pour ce sillon, selon sa ligne/heure/date
-                      const ligneId = s.ligne_id || s.line_id || null;
-                      const schedulePerturbations = (ligneId && !loadingPerturbations) ? getPerturbationsForLine(ligneId, s.time, day.date) : [];
-                      // Variables calculées manquantes
-                      const boardPlatform = platformsBySchedule[s.id] || platformForStation(s, data?.station?.name || '');
-                      const hasDelay = !!(s.delay_min && !s.cancelled);
-                      const infoDelayFallback = null;
-                      const isCancelledFlag = !!s.cancelled;
-                      const isRerouteFlag = !!(s.rerouted || s.reroute);
-                      const hasPureInfo = !!(infoText && !hasDelay);
-                      const disruptionFlags = [];
-                      if (typeof s.delay_min === 'number' && s.delay_min > 0 && !s.cancelled) {
-                        disruptionFlags.push({ type: 'delay', text: `+${s.delay_min}’`, aria: `Retard ${s.delay_min} minutes` });
-                      }
-                      if (s.cancelled) {
-                        disruptionFlags.push({ type: 'cancel', text: 'Supprimé', aria: 'Train supprimé' });
-                      }
-                      if (s.rerouted || s.reroute) {
-                        disruptionFlags.push({ type: 'reroute', text: 'Modifié', aria: 'Parcours modifié' });
-                      }
-
+                    <div className="day-separator">{formatDate(day.date)}</div>
+                    {filteredSchedules.map(schedule => {
+                      // Récupérer perturbations ligne actives (côté client) pour afficher la carte d'info
+                      const linePerts = getPerturbationsForLine(schedule.ligne_id, schedule.time, day.date) || [];
+                      const linePert = linePerts.length ? linePerts[0] : null;
                       return (
-                        <React.Fragment key={compoundId}>
-                          <div
-                            className={"board-row schedule-row" + (s.cancelled ? " cancelled" : "") + (isOpen ? " open" : "")}
-                            role="row"
-                            tabIndex={0}
-                            onClick={() => toggleSchedule(s, data.station.name, compoundId, day.date)}
-                            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSchedule(s, data.station.name, compoundId, day.date)}
-                            aria-expanded={isOpen}
-                          >
-                            <div className="col time" role="cell">
-                              {s.cancelled ? (
-                                <span className="time-base strike cancelled-text">{displayTime}</span>
-                              ) : s.delay_min ? (
-                                <div className="dual-time">
-                                  <span className="t-orig strike" aria-label="Heure prévue initiale">{displayTime}</span>
-                                  <span className="t-new" aria-label={`Heure estimée avec retard ${s.delay_min} minutes`}>{addMinutes(displayTime, s.delay_min)}</span>
-                                </div>
-                              ) : (
-                                <span className="time-base">{displayTime}</span>
-                              )}
-                              {disruptionFlags.map(f => (
-                                <span key={f.type} className={`flag flag-${f.type}`} aria-label={f.aria}>{f.text}</span>
-                              ))}
+                        <React.Fragment key={schedule.id}>
+                          <div className={`board-row-wrapper ${selectedScheduleKey === `${String(schedule.id)}_${day.date}` ? 'open' : ''}`} aria-expanded={selectedScheduleKey === `${String(schedule.id)}_${day.date}`}>
+                            <div
+                              className={`board-row ${schedule.cancelled ? 'cancelled' : ''}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                const key = `${String(schedule.id)}_${day.date}`;
+                                setSelectedScheduleKey(prev => (prev === key ? null : key));
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { const key = `${String(schedule.id)}_${day.date}`; setSelectedScheduleKey(prev => (prev === key ? null : key)); } }}
+                            >
+                              <div className="col-time">
+                                <span>{schedule.time}</span>
+                              </div>
+                              <div className="col-destination">
+                                {type === 'arrivals' ? (
+                                  <div className="dest-name">{schedule.origin || '-'}</div>
+                                ) : (
+                                  <div className="dest-name">{schedule.destination || '-'}</div>
+                                )}
+                              </div>
+                              <div className="col-mode">{schedule.train_type} {schedule.train_number}</div>
+                              <div className="col-right">
+                                <div className="col-platform">{schedule.platform || "-"}</div>
+                                <div className="row-toggle" aria-hidden="true">{selectedScheduleKey === `${String(schedule.id)}_${day.date}` ? '▲' : '▾'}</div>
+                              </div>
                             </div>
-                            <div className="col dest" role="cell">
-                              {s.cancelled ? (
-                                <span className="cancelled-text strike">{type === 'departures' ? s.destination : s.origin}</span>
-                              ) : (
-                                (() => {
-                                  if (
-                                    s.rerouted &&
-                                    type === 'departures' &&
-                                    s.original_destination &&
-                                    s.destination &&
-                                    s.original_destination.toLowerCase() !== s.destination.toLowerCase()
-                                  ) {
-                                    return <><span className="new-dest">{s.destination}</span></>;
-                                  }
-                                  if (
-                                    s.rerouted &&
-                                    type === 'arrivals' &&
-                                    s.original_origin &&
-                                    s.origin &&
-                                    s.original_origin.toLowerCase() !== s.origin.toLowerCase()
-                                  ) {
-                                    return <><span className="new-dest">{s.origin}</span></>;
-                                  }
-                                  return type === 'departures' ? s.destination : s.origin;
-                                })()
-                              )}
-                              {type === 'departures' && !s.cancelled && s.rerouted && s.original_destination && s.destination && s.destination.toLowerCase() !== s.original_destination.toLowerCase() && (
-                                <span className="dest-badge" aria-label="Nouvelle destination">Nouvelle gare de Destination</span>
-                              )}
-                            </div>
-                            <div className="col mode" role="cell">
-                              {s.cancelled ? (
-                                <span className="cancelled-text strike">
-                                  {(() => {
-                                    const isCar = /car|bus/i.test(s.train_type || '');
-                                    const iconClass = isCar ? 'sncf-icon icons-itinerary-bus-2' : 'sncf-icon icons-itinerary-train';
-                                    const modeLabel = isCar ? 'Car' : 'Train';
-                                    return <><span className={iconClass} aria-hidden="true" style={{ fontSize: '1.1em', verticalAlign: 'middle', marginRight: 4 }}></span> {modeLabel} {s.train_type ? formatTrainType(s.train_type) : ''} {s.train_number || ''}</>;
-                                  })()}
+                            {/* Bandeau de retard orange sous la ligne horaire, au-dessus du bandeau d'info */}
+                            {schedule.delay_minutes > 0 && (
+                              <div className="delay-banner-below" role="status" aria-live="polite" style={{background:'#ffe5c2', color:'#a65c00', display:'flex',alignItems:'center',gap:8,padding:'4px 12px',borderRadius:6,margin:'2px 0'}}>
+                                <span className="info-icon" aria-hidden="true">
+                                  <wcs-mat-icon icon="train_alert" />
                                 </span>
-                              ) : (
-                                (() => {
-                                  const isCar = /car|bus/i.test(s.train_type || '');
-                                  const iconClass = isCar ? 'sncf-icon icons-itinerary-bus-2' : 'sncf-icon icons-itinerary-train';
-                                  const modeLabel = isCar ? 'Car' : 'Train';
-                                  return <><span className={iconClass} aria-hidden="true" style={{ fontSize: '1.1em', verticalAlign: 'middle', marginRight: 4 }}></span> {modeLabel} {s.train_type ? formatTrainType(s.train_type) : ''} {s.train_number || ''}</>;
-                                })()
-                              )}
-                            </div>
-                            <div className="col voie" role="cell">
-                              <span className={"platform" + (s.cancelled ? " cancelled-text strike" : "")}>
-                                {boardPlatform}
-                              </span>
-                            </div>
-                            <div className="col fav" role="cell">
-                              <wcs-button
-                                mode="clear"
-                                size="s"
-                                shape="round"
-                                aria-label="Favori"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleFavorite(s.id, favorites.includes(s.id));
-                                }}
-                              >
-                                <wcs-mat-icon icon={favorites.includes(s.id) ? 'favorite' : 'favorite_border'}></wcs-mat-icon>
-                              </wcs-button>
-                            </div>
-                          </div>
-
-                          { (hasDelay || hasPureInfo) && (
-                            <>
-                              {hasDelay && !s.cancelled && (
-                                <div className="board-row sub delay-row" role="row" aria-hidden={false}>
-                                  <div className="col time" role="cell"></div>
-                                  <div className="col dest info" role="cell">
-                                    <div className="delay-info-text">
-                                      <div className="di-line main">
-                                        <span className="di-ico delay-clock" aria-hidden="true"><wcs-mat-icon icon="schedule" aria-hidden="true"></wcs-mat-icon></span>
-                                        <span className="di-text">{(infoDelayFallback || (s.delay_min ? `Retard estimé de ${s.delay_min} min` : 'Retard')) + (s.delay_cause ? ` — ${s.delay_cause}` : '')}</span>
-                                      </div>
+                                <span className="info-title" style={{fontWeight:'bold'}}>Retardé de {schedule.delay_minutes} min</span>
+                              </div>
+                            )}
+                            {/* Bandeau d'information classique, affiché sous le bandeau de retard */}
+                            {!schedule.cancelled && schedule.infoBanner && (
+                              <div className={`line-info-banner info`} role="status" aria-live="polite">
+                                <div className="banner-inner">
+                                  <div className="info-icon" aria-hidden="true"><wcs-mat-icon icon="info" /></div>
+                                  <div className="info-content">
+                                    <div className="info-title">Information</div>
+                                    {schedule.info_message && <div className="info-text">{schedule.info_message}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {/* Si le sillon est supprimé : appliquer style 'cancelled' et afficher un bandeau rouge intégré */}
+                            {schedule.cancelled && (
+                              <div className="cancel-banner" role="status" aria-live="polite">
+                                <div className="banner-inner">
+                                  <div className="info-icon" aria-hidden="true">
+                                    <wcs-mat-icon icon="warning" />
+                                  </div>
+                                  <div className="info-content">
+                                    <div className="info-title">Sillon supprimé</div>
+                                    {schedule.cancel_message && <div className="info-text">{schedule.cancel_message}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {selectedScheduleKey === `${String(schedule.id)}_${day.date}` && (
+                              <>
+                                <div className={`schedule-details ${schedule.cancelled ? 'cancelled' : ''}`}>
+                                  {/* top header like in mock - if cancelled, show struck-through visuals */}
+                                  <div className="schedule-topbar">
+                                    <div className="top-left">
+                                      <div className={`top-time ${schedule.cancelled ? 'struck' : ''}`}>{schedule.time}</div>
+                                      <div className={`top-dest ${schedule.cancelled ? 'struck' : ''}`}>{schedule.destination || schedule.origin || ''}</div>
                                     </div>
+                                    <div className={`top-center ${schedule.cancelled ? 'struck' : ''}`}>{schedule.train_type} {schedule.train_number}</div>
+                                    <div className="top-right">{schedule.mode_icon || ''}</div>
                                   </div>
-                                  <div className="col mode" role="cell"></div>
-                                  <div className="col voie" role="cell"></div>
-                                  <div className="col fav" role="cell"></div>
-                                </div>
-                              )}
-                              {hasPureInfo && (
-                                <div className={"board-row sub info-row" + ((isCancelledFlag || isRerouteFlag) ? " danger-row" : "")} role="row" aria-hidden={false} aria-live={(isCancelledFlag || isRerouteFlag) ? 'polite' : undefined}>
-                                  <div className="col time" role="cell"></div>
-                                  <div className="col dest info" role="cell"><wcs-mat-icon icon="info" aria-hidden="true"></wcs-mat-icon> <span className="one-line">{infoText}</span></div>
-                                  <div className="col mode" role="cell"></div>
-                                  <div className="col voie" role="cell"></div>
-                                  <div className="col fav" role="cell"></div>
-                                </div>
-                              )}
-                            </>
-                          )}
-
-                          {/* Affichage des perturbations pour ce sillon */}
-                          {Array.isArray(schedulePerturbations) && schedulePerturbations.length > 0 && (
-                            <>
-                              {schedulePerturbations.map((perturbation, index) => (
-                                <div className="board-row sub perturbation-row" role="row" key={`${s.id}-perturbation-${index}`}>
-                                  <div className="col time" role="cell"></div>
-                                  <div className="col dest info" role="cell">
-                                    <PerturbationBanner perturbation={perturbation} />
-                                  </div>
-                                  <div className="col mode" role="cell"></div>
-                                  <div className="col voie" role="cell"></div>
-                                  <div className="col fav" role="cell"></div>
-                                </div>
-                              ))}
-                            </>
-                          )}
-
-                          {isOpen && (
-                            <div className="details-panel show">
-                              {details[compoundId]?.loading && <div className="details-loading">Chargement des arrêts…</div>}
-                              {!details[compoundId]?.loading && details[compoundId]?.schedule && (()=> {
-                                const schedDet = details[compoundId].schedule;
-                                // Fusion de l'itinéraire original et du nouveau pour marquer les arrêts supprimés
-                                let displayStops = schedDet.stops || [];
-                                if(schedDet.rerouted && Array.isArray(schedDet.original_stops_detailed)){
-                                  const newMap = new Map();
-                                  (schedDet.stops||[]).forEach(st => { if(st.station_name) newMap.set((st.station_name+"").toLowerCase(), st); });
-                                  displayStops = schedDet.original_stops_detailed.map(os => {
-                                    const key = (os.station_name||'').toLowerCase();
-                                    const match = newMap.get(key);
-                                    if(match){
-                                      return { ...match, removed:false };
-                                    }
-                                    return { station_name: os.station_name, arrival_time: os.arrival_time, departure_time: os.departure_time, time: os.departure_time||os.arrival_time||null, platform: null, removed:true };
-                                  });
-                                }
-                                // Si train supprimé: on remplace l'affichage par l'itinéraire original (si dispo) tout barré rouge
-                                if(schedDet.cancelled){
-                                  const base = Array.isArray(schedDet.original_stops_detailed) && schedDet.original_stops_detailed.length ? schedDet.original_stops_detailed : (schedDet.stops||[]);
-                                  displayStops = base.map(os=> ({ station_name: os.station_name, arrival_time: os.arrival_time, departure_time: os.departure_time, time: os.departure_time||os.arrival_time||null, platform:null, removed:true, cancelled:true }));
-                                }
-                                // Forcer la plage entre l'origine et le terminus du sillon (préférence au reroute)
-                                const originPref = schedDet.new_origin || s.new_origin || s.original_origin || s.origin || (displayStops[0]?.station_name || '');
-                                const destPref = schedDet.new_destination || s.new_destination || s.original_destination || s.destination || (displayStops[displayStops.length-1]?.station_name || '');
-                                const oIdxFull = findStationIndex(displayStops, originPref);
-                                const dIdxFull = findStationIndex(displayStops, destPref);
-                                let rangeStops = displayStops;
-                                if(oIdxFull>=0 && dIdxFull>=0 && oIdxFull<=dIdxFull){
-                                  rangeStops = displayStops.slice(oIdxFull, dIdxFull+1);
-                                }
-                                // Synchronisation: en DEPARTS itinéraire COMPLET (origine->terminus), en ARRIVEES couper jusqu'à la gare du tableau
-                                const boardStation = (data?.station?.name || '');
-                                const boardKey = normalizeStation(boardStation);
-                                const idxInRange = rangeStops.findIndex(st => normalizeStation(st.station_name) === boardKey);
-                                let slicedStops = rangeStops;
-                                // Ancien découpage en mode "arrivals" supprimé pour conserver le terminus
-                                // if(idxInRange >= 0){
-                                //   if(type === 'departures'){
-                                //     slicedStops = rangeStops; // complet
-                                //   } else {
-                                //     slicedStops = rangeStops.slice(0, idxInRange+1);
-                                //   }
-                                // }
-                                // Indices de badges
-                                const firstActiveIdx = (()=> { const i = slicedStops.findIndex(s=> !s.removed); return i>=0? i: 0; })();
-                                const lastActiveIdx = (()=> { const i = [...slicedStops].reverse().findIndex(s=> !s.removed); return i>=0? (slicedStops.length-1-i) : (slicedStops.length-1); })();
-                                // Prépare la liste finale avec origine/destination visibles
-                                const { originLabel, destLabel, originWasChanged, destWasChanged } = getEndpointLabels(schedDet, s);
-                                let listStops = slicedStops.slice();
-                                const oriInListIdx = findStationIndex(listStops, originLabel);
-                                const dstInListIdx = findStationIndex(listStops, destLabel);
-                                const boardNorm = normalizeStation(data?.station?.name || '');
-                                // Heures pour endpoints (conservent la logique existante)
-                                const originIdxFullReal = findStationIndex(slicedStops, originLabel);
-                                const destIdxFullReal = findStationIndex(slicedStops, destLabel);
-                                const originDisplayTime = (
-                                  originIdxFullReal >= 0
-                                    ? (slicedStops[originIdxFullReal].departure_time || slicedStops[originIdxFullReal].time)
-                                    : (slicedStops[firstActiveIdx]?.departure_time || slicedStops[firstActiveIdx]?.time)
-                                ) || '-';
-                                const destDisplayTime = (
-                                  destIdxFullReal >= 0
-                                    ? (slicedStops[destIdxFullReal].arrival_time || slicedStops[destIdxFullReal].time)
-                                    : (slicedStops[lastActiveIdx]?.arrival_time || slicedStops[lastActiveIdx]?.time)
-                                ) || '-';
-                                const originDisplayPlatform = (originIdxFullReal>=0 ? (slicedStops[originIdxFullReal]?.platform ?? null) : (slicedStops[firstActiveIdx]?.platform ?? null));
-                                const destDisplayPlatform = (destIdxFullReal>=0 ? (slicedStops[destIdxFullReal]?.platform ?? null) : (slicedStops[lastActiveIdx]?.platform ?? null));
-                                // Nouvelle logique: si l'origine fournie par l'API est exactement la gare du tableau mais que le premier arrêt réel est une autre gare (train arrive d'abord),
-                                // alors on considère ce premier arrêt réel comme véritable origine pour l'affichage (évite heure dupliquée/mauvaise sur la gare courante).
-                                let originLabelDisplay = originLabel;
-                                if(
-                                  normalizeStation(originLabel) === boardNorm &&
-                                  slicedStops.length &&
-                                  normalizeStation(slicedStops[0].station_name) !== boardNorm &&
-                                  // le board station apparaît plus loin dans la liste ou pas du tout
-                                  true
-                                ){
-                                  originLabelDisplay = slicedStops[0].station_name;
-                                }
-                                // Si l'origine n'est pas présente et ne correspond pas au cas ci-dessus on ne crée plus de ligne synthétique avec une heure erronée.
-                                if(originLabel && oriInListIdx === -1){
-                                  const needSynthetic = (
-                                    // garder éventuellement la synthèse seulement si l'origine est différente de la gare du tableau ET n'est pas déjà le premier arrêt
-                                    normalizeStation(originLabel) !== boardNorm &&
-                                    (!slicedStops.length || normalizeStation(slicedStops[0].station_name) !== normalizeStation(originLabel))
-                                  );
-                                  if(needSynthetic){
-                                    const originScheduleDeparture = (schedDet?.schedule_departure_time || s?.schedule_departure_time || originDisplayTime);
-                                    listStops.unshift({ station_name: originLabel, time: originScheduleDeparture || originDisplayTime, departure_time: originScheduleDeparture || originDisplayTime, platform: originDisplayPlatform, synthetic:true, from_schedule:true });
-                                  } else {
-                                    // On évite d'ajouter une fausse origine; on réaffiche via originLabelDisplay
-                                  }
-                                }
-                                // Ajout forcé de la gare d'origine du sillon si elle est absente de la liste.
-                                // On priorise l'origine fournie par l'API (originLabel), sinon le premier arrêt réel du sillon.
-                                (function ensureOriginListed(){
-                                  // Ne pas utiliser schedDet ici (n'existe pas dans ce scope). Utilise seulement les données "s" et originDisplayTime.
-                                  const originName = originLabel || s.original_origin || s.origin || null;
-                                  const originNorm = normalizeStation(originName || '');
-                                  const already = originNorm && listStops.some(st => normalizeStation(st.station_name) === originNorm);
-                                  if(originName && !already){
-                                    // Déduire l'heure de départ depuis le sillon (préférence) ou depuis le premier arrêt connu
-                                    const originScheduleDeparture = s?.schedule_departure_time || (slicedStops[0]?.departure_time || slicedStops[0]?.time) || originDisplayTime || null;
-                                    listStops.unshift({ station_name: originName, time: originScheduleDeparture || originDisplayTime, departure_time: originScheduleDeparture || originDisplayTime, platform: originDisplayPlatform || null, synthetic:true, from_schedule:true });
-                                    return;
-                                  }
-                                  // En dernier recours, si aucune origine déclarée mais un premier arrêt réel différent de la gare du tableau, l'ajouter
-                                  const earliestStop = [...slicedStops].find(st => st && !st.removed) || null;
-                                  const earliestNameNorm = normalizeStation(earliestStop?.station_name || '');
-                                  const boardNameNorm = normalizeStation(data?.station?.name || '');
-                                  const earliestAlready = earliestNameNorm && listStops.some(st=> normalizeStation(st.station_name)===earliestNameNorm);
-                                  if(earliestStop && !earliestAlready && earliestNameNorm && earliestNameNorm !== boardNameNorm){
-                                    const originScheduleDeparture = s?.schedule_departure_time || (earliestStop.departure_time || earliestStop.time) || originDisplayTime;
-                                    listStops.unshift({ station_name: earliestStop.station_name, time: originScheduleDeparture || '-', departure_time: originScheduleDeparture || '-', platform: earliestStop.platform||null, synthetic:true, forced_origin:true });
-                                  }
-                                })();
-                                return (
-                                  <div className="details-content">
-                                    {/* Affichage du bandeau Information en une ligne (icône + texte) uniquement */}
-                                    {schedDet.info && (
-                                      <div className="alert-info-block" role="note" aria-label="Information trafic" style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: '#e6f4fa', borderRadius: '4px', color: '#0088ce', fontWeight: 600, marginBottom: '12px'}}>
-                                        <span className="ai-icon" aria-hidden="true" style={{fontSize: '20px'}}>i</span>
-                                        <span className="ai-title">Information</span>
-                                      </div>
-                                    )}
-                                    {/* Card détaillée pour la cause (message info) */}
-                                    {schedDet.info && (
-                                      <div className="info-card-detail" style={{background: '#e6f4fa', borderLeft: '4px solid #0088ce', borderRadius: '4px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px'}}>
-                                        <span className="ai-icon" aria-hidden="true" style={{fontSize: '24px', color: '#0088ce', marginTop: '2px'}}>i</span>
+                                  {/* Détail du retard */}
+                                  {schedule.delay_minutes > 0 && (
+                                    <div className="delay-details card" role="status" aria-live="polite">
+                                      <div className="card-body" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                        <div style={{ color: '#e67e22', fontSize: 24 }} aria-hidden="true">
+                                          <wcs-mat-icon icon="train_alert" />
+                                        </div>
                                         <div>
-                                          <div style={{fontWeight: 700, color: '#0088ce', marginBottom: '4px'}}>Information</div>
-                                          <div className="ai-message" style={{color: '#333'}}>{schedDet.info}</div>
+                                          <div style={{ fontWeight: 'bold', fontSize: '1rem' }}>Retardé de {schedule.delay_minutes} min</div>
+                                          {schedule.delay_cause && (
+                                            <div style={{ marginTop: 4, color: '#a65c00' }}>{schedule.delay_cause}</div>
+                                          )}
                                         </div>
                                       </div>
-                                    )}
-                                    <div className="route-summary" role="group" aria-label="Origine et destination">
-                                      <div className="rs-item"><span className="rs-label">Provenance</span><span className={"rs-value" + (originWasChanged? ' changed':'')}>{originLabel || '-'}</span></div>
-                                      <div className="rs-item"><span className="rs-label">Destination</span><span className={"rs-value" + (destWasChanged? ' changed':'')}>{destLabel || '-'}</span></div>
                                     </div>
-                                    <section className="stops-section">
-                                      <h3>Liste des gares</h3>
-                                      <p className="subtitle">desservies par le train {formatTrainType(schedDet.train_type)} {schedDet.train_number}</p>
-                                      <p className="operator">Opéré par SNCF Voyageurs</p>
-                                      <div className="stops-table" role="table">
-                                        <div className="stops-head" role="rowgroup">
-                                          <div className="stops-row head" role="row">
-                                            <div className="st-col arr" role="columnheader">Arrivée</div>
-                                            <div className="st-col dep" role="columnheader">Départ</div>
-                                            <div className="st-col name" role="columnheader">Gare</div>
-                                            <div className="st-col voie" role="columnheader">Voie</div>
+                                  )}
+
+                                  {/* Card d'information liée à la ligne (bandeau global) */}
+                                  {(linePert || schedule.infoBanner) && (
+                                    <div className="info-line-card card">
+                                      <div className="card-body">
+                                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                          <div style={{ color: '#2b6fa8', fontSize: 20 }} aria-hidden="true"><wcs-mat-icon icon="info" /></div>
+                                          <div>
+                                            <h4 className="h6 m-0">{linePert?.titre || 'Information sur la ligne'}</h4>
+                                            {(linePert?.description || schedule.info_message) && (
+                                              <div style={{ whiteSpace: 'pre-wrap', marginTop: 6, color: '#113049' }}>{linePert?.description || schedule.info_message}</div>
+                                            )}
+                                            {linePert && (
+                                              <div className="small text-muted" style={{ marginTop: 8 }}>
+                                                {linePert.date_debut ? `Du ${new Date(linePert.date_debut).toLocaleDateString('fr-FR')}` : ''}{linePert.date_fin ? ` au ${new Date(linePert.date_fin).toLocaleDateString('fr-FR')}` : ''}
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
-                                        <div className="stops-body" role="rowgroup">
-                                          {listStops.map((st, idx) => {
-                                            const isRemoved = !!st.removed;
-                                            const isCancelledStop = !!st.cancelled;
-                                            const isCurrent = (normalizeStation(st.station_name) === normalizeStation(data?.station?.name || ''));
-                                            const isOriginRow = normalizeStation(st.station_name) === normalizeStation(originLabelDisplay);
-                                            const isDestRow = normalizeStation(st.station_name) === normalizeStation(destLabel);
-                                            const isOriginBadge = !isRemoved && isOriginRow;
-                                            const isTerminusBadge = !isRemoved && isDestRow;
-                                            // Sélection arrivée
-                                            const boardListIdx = listStops.findIndex(x => normalizeStation(x.station_name) === boardKey);
-                                            const selectable = !isRemoved && !isCancelledStop && idx > boardListIdx;
-                                            const selectedName = selectedArrivalMap[s.id] || null;
-                                            const isSelected = selectable && selectedName && normalizeStation(selectedName) === normalizeStation(st.station_name);
-                                            const rowClasses = [
-                                              'stops-row',
-                                              isRemoved ? 'removed' : '',
-                                              isCancelledStop ? 'cancelled' : '',
-                                              idx === 0 ? 'first' : '',
-                                              isSelected ? 'selected' : ''
-                                            ].filter(Boolean).join(' ');
-                                            const handleClick = (e)=>{ e.stopPropagation(); if(!selectable) return; setSelectedArrivalMap(m=> ({...m, [s.id]: st.station_name})); };
-                                            // Correction ici : schedDet est bien dans le scope
-                                            const delayMin = (typeof schedDet?.delay_min === 'number' ? schedDet.delay_min : (typeof s?.delay_min === 'number' ? s.delay_min : null));
-                                            const showDelayed = !!delayMin && !isRemoved && !isCancelledStop;
-                                            // Correction affichage arrivée/départ pour origine/terminus
-                                            let arrBase = null, depBase = null;
-                                            if (isOriginRow) {
-                                              arrBase = null;
-                                              // Utilise en priorité l'heure du sillon (s.time) si la gare d'origine est la gare du tableau
-                                              if(normalizeStation(originLabelDisplay) === normalizeStation(data?.station?.name||'') && s.time){
-                                                depBase = s.time;
-                                              } else {
-                                                depBase = st.departure_time || st.time || null;
-                                              }
-                                            } else if (isDestRow) {
-                                              arrBase = st.arrival_time || st.time || null;
-                                              depBase = null;
-                                            } else {
-                                              arrBase = st.arrival_time || null;
-                                              depBase = st.departure_time || null;
-                                            }
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {schedule.cancelled ? (
+                                    <>
+                                      {/* grand bandeau rouge */}
+                                      <div className="cancel-hero" role="alert">
+                                        <div className="hero-icon"><wcs-mat-icon icon="error_outline" /></div>
+                                        <div className="hero-body">
+                                          <div className="hero-title">Supprimé</div>
+                                          <div className="hero-sub">{schedule.cancel_reason || 'Conditions de départ non réunies'}</div>
+                                        </div>
+                                      </div>
+
+                                      {/* si message d'info complémentaire : bandeau bleu */}
+                                      {schedule.message && (
+                                        <div className="info-hero">
+                                          <div className="info-icon"><wcs-mat-icon icon="info" /></div>
+                                          <div className="info-body">
+                                            <div className="info-title">Information</div>
+                                            <div className="info-text">{schedule.message}</div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <h3 className="stops-title">Liste des gares</h3>
+                                      <div className="stops-subtitle">Desservies (arrêts supprimés indiqués)</div>
+
+                                      <div className="stops-headers cancelled-headers">
+                                        <div className="h-time">Départ</div>
+                                        <div className="h-marker"></div>
+                                        <div className="h-name">Gare</div>
+                                        <div className="h-platform">Voie</div>
+                                      </div>
+
+                                      {Array.isArray(schedule.stops) && schedule.stops.length > 0 ? (
+                                        <ul className="stops-list cancelled-list">
+                                          {schedule.stops.map((stop, i) => {
+                                            const displayedTime = stop.time || stop.departure_time || stop.arrival_time || '-';
+                                            const isLast = i === schedule.stops.length - 1;
                                             return (
-                                              <div key={(st.station_name||'') + '#' + idx} className={rowClasses} role="row" onClick={handleClick}>
-                                                <div className="st-col arr" role="cell">
-                                                  {arrBase ? (
-                                                    showDelayed && !isOriginRow && !isDestRow ? (
-                                                      <div className="dual-time small">
-                                                        <span className="t-orig strike">{arrBase}</span>
-                                                        <span className="t-new">{addMinutes(arrBase, delayMin)}</span>
-                                                      </div>
-                                                    ) : (
-                                                      <span className={isRemoved ? 'removed-time strike' : ''}>{arrBase}</span>
-                                                    )
-                                                  ) : <span className={isRemoved ? 'removed-time strike' : ''}>-</span>}
+                                              <li key={`${schedule.id}_${stop.station_id || i}_${i}`} className={`${isLast ? 'last' : ''}`}>
+                                                {/* Garder le même markup que les arrêts normaux pour réutiliser la barre verticale */}
+                                                <div className="stop-time struck">{displayedTime}</div>
+                                                <div className="stop-marker-cell"><span className="stop-marker" aria-hidden="true"></span></div>
+                                                <div className="stop-name">
+                                                  <span className="struck">{stop.station_name}</span>
+                                                  {/* raison affichée sous le nom de la gare */}
+                                                  <div className="removed-sub">{schedule.cancel_reason || 'Conditions de départ non réunies'}</div>
                                                 </div>
-                                                <div className="st-col dep" role="cell">
-                                                  {depBase ? (
-                                                    showDelayed && !isOriginRow && !isDestRow ? (
-                                                      <div className="dual-time small">
-                                                        <span className="t-orig strike">{depBase}</span>
-                                                        <span className="t-new">{addMinutes(depBase, delayMin)}</span>
-                                                      </div>
-                                                    ) : (
-                                                      <span className={isRemoved ? 'removed-time strike' : ''}>{depBase}</span>
-                                                    )
-                                                  ) : <span className={isRemoved ? 'removed-time strike' : ''}>-</span>}
-                                                </div>
-                                                <div className="st-col name" role="cell">
-                                                  <span className={isRemoved ? 'removed-name' : ''}>{st.station_name}</span>
-                                                  {isCurrent && <span className="stop-badge here" aria-hidden="true">Ici</span>}
-                                                  {!isRemoved && isOriginBadge && <span className="stop-badge origin" aria-hidden="true">Départ</span>}
-                                                  {!isRemoved && isTerminusBadge && <span className="stop-badge terminus" aria-hidden="true">Terminus</span>}
-                                                </div>
-                                                <div className="st-col voie" role="cell">{(isCurrent && (platformsBySchedule[s.id] || platformForStation(s, data?.station?.name || ''))) || st.platform || '-'}</div>
-                                              </div>
+                                                <div className="stop-platform">-</div>
+                                              </li>
                                             );
                                           })}
+                                        </ul>
+                                      ) : (
+                                        <div className="no-stops">Détails non disponibles pour cet horaire.</div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    /* non-cancelled original rendering */
+                                    <>
+                                      {/* petite zone d'information bleu */}
+                                      {schedule.message && (
+                                        <div className="schedule-info">
+                                          <div className="info-icon"><wcs-mat-icon icon="info" /></div>
+                                          <div className="info-text">{schedule.message}</div>
                                         </div>
+                                      )}
+
+                                      <h3 className="stops-title">Liste des gares</h3>
+                                      <div className="stops-subtitle">desservies par le {schedule.train_type} {schedule.train_number}</div>
+
+                                      <div className="stops-headers">
+                                        <div className="h-time">Départ</div>
+                                        <div className="h-marker"></div>
+                                        <div className="h-name">Gare</div>
+                                        <div className="h-platform">Voie</div>
                                       </div>
-                                      {/* Bloc réservation */}
-                                      {(!s.cancelled) && (()=>{
-                                        const f = getForm(s.id);
-                                        const pax = Math.max(1, parseInt(f.passengers||1,10));
-                                        const cardMap = { none:'Sans carte', jeune:'Carte Jeune', senior:'Carte Senior', weekend:'Carte Week-end' };
-                                        const cardLbl = cardMap[f.card] || 'Sans carte';
-                                        const arrivalChosen = !!selectedArrivalMap[s.id];
-                                        const toggleEdit = ()=> updateForm(s.id, { editing: !f.editing });
-                                        return (
-                                          <div className="buy-section" aria-label="Achat">
-                                            <h4 className="buy-title">Vous souhaitez acheter un trajet ?</h4>
-                                            <p className="buy-help">Sélectionnez votre gare d&apos;arrivée dans la liste ci-dessus</p>
-                                            <div className="buy-form">
-                                              <div className="buy-line" role="group" aria-label="Voyageurs et carte">
-                                                <wcs-mat-icon icon="person" aria-hidden="true"></wcs-mat-icon>
-                                                <div className="sum-meta">{pax} voyageur{pax>1?'s':''}, {cardLbl}</div>
-                                                <wcs-button size="s" shape="round" mode="clear" aria-label="Modifier voyageurs et carte" onClick={e=>{ e.preventDefault(); e.stopPropagation(); toggleEdit(); }}>
-                                                  <wcs-mat-icon icon="edit"></wcs-mat-icon>
-                                                </wcs-button>
-                                              </div>
-                                              {f.editing && (
-                                                <div className="buy-line" role="group" aria-label="Edition voyageurs et carte">
-                                                  <label style={{fontSize:'.8rem'}}>Voyageurs
-                                                    <input type="number" min={1} max={8} value={pax} onChange={e=> updateForm(s.id,{ passengers: Math.max(1, Math.min(8, parseInt(e.target.value||'1',10))) })} />
-                                                  </label>
-                                                  <label style={{fontSize:'.8rem'}}>Carte
-                                                    <select value={f.card||'none'} onChange={e=> updateForm(s.id,{ card:e.target.value })}>
-                                                      <option value="none">Sans carte</option>
-                                                      <option value="jeune">Carte Jeune</option>
-                                                      <option value="senior">Carte Senior</option>
-                                                      <option value="weekend">Carte Week-end</option>
-                                                    </select>
-                                                  </label>
+
+                                      {Array.isArray(schedule.stops) && schedule.stops.length > 0 ? (
+                                        <ul className="stops-list">
+                                          {schedule.stops.map((stop, i) => {
+                                            const isOrigin = !!stop.origin;
+                                            const isDest = !!stop.dest;
+                                            const displayedTime = isOrigin
+                                              ? (schedule.schedule_departure_time || stop.time || stop.departure_time || stop.arrival_time || '-')
+                                              : (isDest
+                                                ? (schedule.schedule_arrival_time || stop.time || stop.arrival_time || stop.departure_time || '-')
+                                                : (stop.time || stop.arrival_time || stop.departure_time || '-'));
+
+                                            return (
+                                              <li key={`${schedule.id}_${stop.station_id || i}_${i}`} className={`${i === schedule.stops.length - 1 ? 'last' : ''} ${stop.origin ? 'origin' : ''} ${stop.dest ? 'dest' : ''}`}>
+                                                <div className="stop-time">{displayedTime}</div>
+                                                <div className="stop-marker-cell"><span className="stop-marker" aria-hidden="true"></span></div>
+                                                <div className="stop-name">
+                                                  {stop.station_name}
+                                                  {stop.origin && <span className="station-badge origin">Origine</span>}
+                                                  {stop.dest && <span className="station-badge dest">Terminus</span>}
                                                 </div>
-                                              )}
-                                              <wcs-button className="buy-btn" onClick={()=> addToCart(s)} disabled={!arrivalChosen || choosing}>
-                                                Acheter ce trajet
-                                              </wcs-button>
-                                            </div>
-                                          </div>
-                                        );
-                                      })()}
-                                    </section>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-              {marked.size > 0 && (
-                <div className="bulk-bar">
-                  <span>{marked.size} sélection(s)</span>
-                  <wcs-button size="s" onClick={bulkAdd} disabled={choosing}>Ajouter la sélection</wcs-button>
-                </div>
-              )}
-              {showGoCart && (
-                <div className="go-cart-fab" role="alert">
-                  <wcs-button size="s" onClick={()=>router.push('/panier')}>
-                    Voir le panier
-                  </wcs-button>
-                </div>
-              )}
-            </div>
-          )}
-      </main>
-      <style jsx>{`
-        .board-wrapper { max-width:1250px; margin:0 auto; padding:1rem 1.5rem 3rem; }
-        .pd-breadcrumb { font-size:.75rem; margin-bottom:1.25rem; }
-        .pd-breadcrumb ol { list-style:none; display:flex; gap:.4rem; padding:0; margin:0; }
-        .pd-breadcrumb a { color:#0d5637; text-decoration:none; }
-        .board-header { display:flex; justify-content:space-between; gap:2rem; flex-wrap:wrap; align-items:flex-start; }
-        .board-title { font-size:1.6rem; margin:0 0 .2rem; font-weight:800; }
-        .board-station { font-size:1.05rem; margin:.1rem 0 1rem; font-weight:600; }
-        .board-pills { display:flex; gap:.5rem; }
-        .pill { background:#dedede; border:none; padding:.5rem 1.15rem; border-radius:999px; font-size:.8rem; font-weight:600; cursor:pointer; }
-        .pill.active { background:#0d5637; color:#fff; }
-        .board-actions { display:flex; gap:1.4rem; font-size:.72rem; align-items:center; }
-        .act-link { color:#0d5637; display:inline-flex; gap:.3rem; align-items:center; text-decoration:none; }
-        .act-link:hover { text-decoration:underline; }
-        .board-card { background:#fff; border-radius:6px; padding:.75rem 0 .5rem; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-        .board-row { display:grid; grid-template-columns:90px 1fr 260px 70px 60px; font-size:.78rem; align-items:center; padding:.3rem .75rem; column-gap:.75rem; }
-        .board-row.head { font-size:.7rem; font-weight:600; border-bottom:1px solid #d7d7d7; background:#fff; }
-        .board-row.sub { background:#f1f7fa; border-bottom:1px solid #e5e5e5; }
-        /* Bandeau retard (orange) */
-        .board-row.sub.delay-row { background:#fff3cd; border-bottom:1px solid #ffe69c; position:relative; }
-        .board-row.sub.delay-row:before { content:""; position:absolute; top:-8px; left:16px; width:0; height:0; border-style:solid; border-width:8px 8px 0 8px; border-color:#fff3cd transparent transparent transparent; }
-        .delay-row .col.dest.info { color:#7a3e00; }
-        .delay-row .delay-info-text{ background:transparent; border-left:0; padding:.55rem 0; border-radius:0; box-shadow:none; }
-        .delay-row .di-line.main{ display:flex; align-items:center; gap:.5rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .delay-row .di-text{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .delay-row .delay-info-text .di-line.cause{ display:none; }
-        .delay-row .di-ico.delay-clock { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:#ffc107; color:#fff; margin-right:.25rem; box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); }
-        .delay-row .di-ico.delay-clock wcs-mat-icon { font-size:16px; line-height:1; }
-        /* Bandeau info en rouge pour suppression/modification de parcours */
-        .board-row.sub.info-row.danger-row { background:#f8d7da; border-bottom-color:#f1aeb5; position:relative; }
-        .board-row.sub.info-row.danger-row:before { content:""; position:absolute; top:-8px; left:16px; width:0; height:0; border-style:solid; border-width:8px 8px 0 8px; border-color:#f8d7da transparent transparent transparent; }
-        .info-row.danger-row .col.dest.info{ color:#7a0010; }
-        .info-row.danger-row .di-line.main{ display:flex; align-items:center; gap:.5rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .info-row.danger-row .di-text{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        /* .info-row.danger-row .di-line.cause{ display:none; } */
-        .info-row.danger-row .di-ico.delay-clock { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:#dc3545; color:#fff; margin-right:.25rem; box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); }
-        .info-row.danger-row .di-ico.delay-clock wcs-mat-icon { font-size:16px; line-height:1; }
-        /* Info suppression en une ligne */
-        .info-row.danger-row .col.dest.info{ display:flex; align-items:center; gap:.5rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .info-row.danger-row .col.dest.info .one-line{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .board-loading, .board-error { margin:2rem 0; text-align:center; font-size:.9rem; }
-        .schedule-row { cursor:pointer; border-top:2px solid transparent; }
-        .schedule-row.open { border-top-color:#c9b800; }
-        .col.time .delay { margin-left:4px; color:#b40000; font-weight:600; font-size:.65rem; }
-        .col.time { display:flex; flex-wrap:wrap; align-items:center; gap:.25rem; }
-        .dual-time { display:flex; flex-direction:column; line-height:1.05; }
-        .dual-time .t-orig { font-weight:600; }
-        .dual-time .t-orig.strike { text-decoration:line-through; opacity:.65; }
-        .dual-time .t-new { color:#ff9f34; font-weight:600; }
-        .dual-time.small .t-orig { font-size:.68rem; }
-        .dual-time.small .t-new { font-size:.62rem; }
-        .col.time .time-base { font-weight:600; }
-        .col.time .time-flags { display:inline-flex; gap:.25rem; flex-wrap:wrap; }
-        .col.time .flag { background:#222; color:#fff; font-size:.55rem; font-weight:700; padding:.15rem .4rem; border-radius:4px; line-height:1; text-transform:uppercase; letter-spacing:.5px; }
-        .col.time .flag.flag-delay { background:#ff9f34; color:#422600; }
-        .col.time .flag.flag-cancel { background:#b40000; }
-        .col.time .flag.flag-reroute { background:#0d5637; }
-        .col.fav { display:flex; justify-content:center; }
-        .col.voie .platform { font-weight:700; font-size:.9rem; }
-        .details-panel { background:#eaf0d3; padding:0 1.25rem; overflow:hidden; transition:max-height .5s ease, opacity .35s ease; max-height:0; opacity:0; border-radius:10px; }
-        .details-panel.show { max-height:1200px; opacity:1; padding:1rem 1.25rem 1.75rem; }
-        /* Ancienne règle dépendant d'une seule sous-ligne supprimée */
-        /* .schedule-row.open + .board-row.sub + .details-panel { ... } */
-        .details-content { animation: fadeSlide .45s ease; }
-        @keyframes fadeSlide { from { opacity:0; transform:translateY(-6px);} to { opacity:1; transform:translateY(0);} }
-        @media (max-width:900px){ .details-panel { padding:.9rem .9rem 1.4rem; } }
-        .bulk-bar { position:sticky; bottom:0; background:#fff; border-top:1px solid #ccc; padding:.5rem .75rem; display:flex; justify-content:space-between; align-items:center; }
-        .go-cart-fab { position:fixed; bottom:24px; right:24px; z-index:60; }
-        /* Styles détaillés réintroduits pour la liste des gares */
-        .details-info-text { background:#e6f1f8; padding:.9rem 1rem; border-radius:4px; font-size:.72rem; line-height:1.3; position:relative; margin:0 0 1rem; white-space:pre-line; }
-        .alert-info-block { background:#eef5f9; border-radius:0 0 4px 4px; padding:1.1rem 1.4rem 1.2rem; margin:0 0 1.1rem; box-shadow:inset 0 1px 0 #dbe7ef; }
-        .alert-info-block:before { content:""; position:absolute; top:0; left:0; right:0; height:0; border-top:0 solid transparent; border-left:0 solid transparent; }
-        .ai-header { display:flex; align-items:center; gap:.6rem; margin:0 0 .55rem; }
-        .ai-icon { width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; background:#1b5f90; color:#fff; font-size:.8rem; font-weight:600; border-radius:50%; box-shadow:0 0 0 2px #e6f2f8; }
-        .ai-title { font-size:1.05rem; font-weight:700; letter-spacing:.3px; }
-        .ai-message { margin:0; font-size:.9rem; line-height:1.45; white-space:pre-line; }
-        /* Suppression des styles placeholder inutilisés */
-        .details-info-empty, .badge-info { display:none; }
-        .stops-section h3 { margin:.2rem 0 .2rem; font-size:1rem; font-weight:800; }
-        .stops-section .subtitle { margin:0 0 .4rem; font-size:.75rem; }
-        .stops-section .operator { font-size:.65rem; margin:0 0 1rem; color:#5a5a5a; }
-        .stops-table { border:0; font-size:.82rem; }
-        .stops-head { color:#6b6b6b; font-weight:600; }
-        .stops-row { display:grid; grid-template-columns:70px 70px 1fr 60px; align-items:center; padding:.5rem .4rem .5rem .2rem; position:relative; cursor:pointer; }
-        .stops-row.head { cursor:default; padding:.25rem .2rem; font-size:.78rem; }
-        .stops-row.first { font-weight:700; }
-        .stops-row:not(.head):not(.selected):hover { background:#f7fbe8; }
-        .stops-row.selected { background:#0d5637; color:#fff; }
-        .st-col.time, .st-col.arr, .st-col.dep { color:#1a1a1a; font-variant-numeric:tabular-nums; }
-        .st-col.name { position:relative; padding-left:32px; z-index:2; }
-        .st-col.voie { text-align:left; color:#1a1a1a; font-weight:600; }
-        .stops-body { position:relative; }
-        /* Barre verticale + points alignés entre temps et nom */
-        .stops-body:before { content:""; position:absolute; top:.5rem; bottom:.5rem; left:140px; width:3px; background:#c9b800; border-radius:6px; }
-        .stops-row:before { content:""; position:absolute; left:140px; top:50%; width:12px; height:12px; transform:translate(-6px,-50%); border:2px solid #0d5637; background:#fff; border-radius:50%; box-sizing:border-box; z-index:1; }
-        /* Suppression du bloc gradient avec variables CSS pour éviter les erreurs de compilation */
-        .stops-row.first:before { background:#fff; }
-        .stops-row.active:before { background:#fff; }
-        .stops-row.selected:before { border-color:#0d5637; background:#fff; }
-        .stops-row.removed { color:#555; opacity:.8; cursor:default; }
-        .stops-row.removed .removed-name { text-decoration:line-through; }
-        .stops-row.removed .removed-time.strike { text-decoration:line-through; opacity:.75; }
-        .stops-row.removed .removed-label { background:#b40000; color:#fff; font-weight:700; font-size:.5rem; padding:.15rem .35rem; border-radius:4px; text-transform:uppercase; letter-spacing:.5px; display:inline-block; }
-        .stops-body.cancelled-itinerary:before { display:none; }
-        .stops-row.cancelled:before { display:none; }
-        .stops-row.cancelled { cursor:default; }
-        .cancelled-text { color:#b40000; }
-        .cancelled-label { background:#b40000; color:#fff; font-weight:700; font-size:.5rem; padding:.15rem .35rem; border-radius:4px; text-transform:uppercase; letter-spacing:.5px; display:inline-block; }
-        .orig-dest.strike { text-decoration:line-through; opacity:.55; margin-right:.35rem; font-weight:500; }
-        .new-dest { font-weight:600; }
-        .dest-badge { margin-left:.45rem; background:#0d5637; color:#fff; font-size:.5rem; font-weight:700; padding:.18rem .4rem .2rem; border-radius:4px; text-transform:uppercase; letter-spacing:.6px; display:inline-block; line-height:1; }
-        .stop-badge.terminus { margin-left:.4rem; background:#0d5637; color:#fff; font-size:.5rem; font-weight:700; padding:.18rem .4rem .2rem; border-radius:4px; text-transform:uppercase; letter-spacing:.6px; display:inline-block; line-height:1; }
-        .stop-badge.origin { margin-left:.4rem; background:#0d5637; color:#fff; font-size:.5rem; font-weight:700; padding:.18rem .4rem .2rem; border-radius:4px; text-transform:uppercase; letter-spacing:.6px; display:inline-block; line-height:1; }
-        .stop-badge.here { margin-left:.4rem; background:#0d5637; color:#fff; font-size:.5rem; font-weight:700; padding:.18rem .4rem .2rem; border-radius:4px; text-transform:uppercase; letter-spacing:.6px; display:inline-block; line-height:1; }
-        /* Bloc achat (style proche de la maquette) */
-        .buy-section { margin-top:1.1rem; }
-        .buy-title { margin:.6rem 0 .2rem; font-size:.95rem; font-weight:800; }
-        .buy-help { margin:0 0 .8rem; font-size:.78rem; color:#333; }
-        .buy-form { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
-        .buy-line { display:inline-flex; align-items:center; gap:.5rem; background:#fff; border-radius:10px; padding:.55rem .75rem; box-shadow:0 1px 0 rgba(0,0,0,.05); }
-        .buy-line input[type="number"], .buy-line select { border:none; background:transparent; font-size:.85rem; }
-        .buy-btn { border-radius:10px; }
-        .route-summary { display:grid; grid-template-columns:1fr 1fr; gap:.6rem 1rem; padding:.6rem .4rem .4rem; margin:.2rem 0 .6rem; background:#fff; border-radius:6px; }
-        .rs-item { display:flex; align-items:baseline; gap:.5rem; font-size:.82rem; }
-        .rs-label { min-width:92px; color:#555; font-weight:600; text-transform:uppercase; font-size:.68rem; letter-spacing:.4px; }
-        .rs-value { font-weight:700; }
-        .rs-value.changed { color:#0d5637; }
-      `}</style>
+                                                <div className="stop-platform">{stop.platform || "-"}</div>
+                                              </li>
+                                            );
+                                          })}
+                                        </ul>
+                                      ) : (
+                                        <div className="no-stops">Détails non disponibles pour cet horaire.</div>
+                                      )}
+                                    </>
+                                  )}
+
+
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
+             </div>
+           </div>
+         )}
+       </main>
+       <style jsx>{`
+         /* Styles pour affichage sillon supprimé (inspiré de la maquette) */
+        .schedule-details.cancelled { background: #eef4d6; }
+        .schedule-topbar .struck { text-decoration: line-through; color: rgba(0,0,0,0.35); }
+        .cancel-hero { background: #f6e0e0; border-radius: 4px; display:flex; gap:12px; padding:18px; margin:12px 0; align-items:flex-start; }
+        .cancel-hero .hero-icon { color:#b51f2b; font-size:28px; display:flex; align-items:center; }
+        .cancel-hero .hero-title{ font-weight:700; color:#b51f2b; font-size:20px }
+        .cancel-hero .hero-sub{ color:#6b4f4f; margin-top:6px }
+        .info-hero { background:#e9f6fb; border-radius:4px; display:flex; gap:12px; padding:16px; margin:12px 0; }
+        .info-hero .info-icon{ color:#2b6fa8; font-size:22px }
+        .info-hero .info-title{ font-weight:700 }
+        /* Reprendre le markup standard pour la barre verticale (.stop-marker + :after) */
+        .stops-list.cancelled-list { list-style:none; padding:0; margin:0; background: #eaf0c9; border-radius:6px; padding: 12px 12px 24px 12px; }
+        .stops-list.cancelled-list li { display:grid; grid-template-columns:90px 24px 1fr 100px; gap:8px; align-items:flex-start; padding:12px 0; position:relative }
+        /* afficher tout le texte de la liste en rouge tout en conservant la barre verticale verte */
+        .stops-list.cancelled-list .stop-time { color:#b00000; text-decoration:line-through; padding-top:4px }
+        .stops-list.cancelled-list .stop-marker-cell { display:flex; align-items:flex-start; justify-content:center }
+        /* conserve la couleur de la timeline (stop-marker) mais texte rouge */
+        .stops-list.cancelled-list .stop-name { color:#b00000; font-weight:700 }
+        .stops-list.cancelled-list .stop-name .struck { text-decoration: line-through; display:block; color:#b00000 }
+        .stops-list.cancelled-list .removed-sub { margin-top:6px; color:#b00000; font-size:13px }
+        .stops-list.cancelled-list .stop-platform{ color:#b00000; padding-top:4px }
+        .info-line-card { margin:12px 0; border-left:4px solid #2b6fa8; background:#eaf6ff; }
+        .info-line-card .card-body { padding:12px; }
+         .board-wrapper {
+           padding: 24px;
+           background: #f6f6f6;
+           min-height: 100vh;
+           display: flex;
+           flex-direction: column;
+           align-items: center;
+         }
+         .pd-breadcrumb {
+           margin-bottom: 16px;
+           text-align: left;
+         }
+         .breadcrumb-horizontal-left {
+           display: flex;
+           gap: 8px;
+           list-style: none;
+           padding: 0;
+           margin: 0;
+           font-size: 0.9rem;
+           color: #333;
+           align-items: center;
+         }
+         .breadcrumb-horizontal-left li {
+           display: inline;
+         }
+         .breadcrumb-horizontal-left li a {
+           text-decoration: none;
+           color: #267a3a;
+         }
+         .breadcrumb-horizontal-left li[aria-hidden="true"] {
+           color: #666;
+         }
+         .board-header {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           width: 100%;
+           max-width: 980px;
+           margin-bottom: 24px;
+         }
+         .board-actions {
+           display: flex;
+           flex-direction: column;
+           align-items: flex-end;
+         }
+         .act-link {
+           color: #267a3a;
+           text-decoration: none;
+           margin-bottom: 8px;
+         }
+         .board-pills {
+           display: flex;
+           gap: 8px;
+           margin-bottom: 24px;
+         }
+         .board-pills button {
+           padding: 8px 16px;
+           border: none;
+           border-radius: 20px;
+           background: #e6e6e6;
+           color: #333;
+           cursor: pointer;
+         }
+         .board-pills button.active {
+           background: #2f7030;
+           color: #fff;
+         }
+         .board-card {
+           max-width: 980px;
+           width: 100%;
+           background: #fff;
+           border-radius: 8px;
+           box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
+           overflow: hidden;
+         }
+         .board-head {
+           display: grid;
+           grid-template-columns: 1fr 2fr 2fr 1fr;
+           background: #f4e5b0;
+           padding: 8px;
+           font-weight: bold;
+         }
+         .board-body {
+           display: grid;
+           grid-template-columns: 1fr 2fr 2fr 1fr;
+           gap: 8px;
+           padding: 8px;
+         }
+         .board-row {
+           display: grid;
+           grid-template-columns: 90px 1fr 1fr 150px;
+           align-items: center;
+           gap: 8px;
+           cursor: pointer;
+         }
+         .board-row-wrapper { grid-column: span 4; display: block; }
+         .board-row-wrapper:hover .board-row { background: #fbfbfb; }
+         .board-row-wrapper:focus { outline: none; }
+         .board-row:focus { outline: 2px solid rgba(38,122,58,0.14); }
+         .board-row-wrapper .col-time { padding-left: 12px; color: #2f7030; font-weight: 600; }
+         .board-row-wrapper .col-destination { color: #213a21; }
+         .board-row-wrapper .col-mode { color: #666; }
+         .board-row-wrapper .col-right { display:flex; align-items:center; gap:12px; justify-content:flex-end; padding-right:12px }
+         .row-toggle { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:18px; background:#e7f4ea; color:#267a3a; font-size:12px; border:1px solid #d7ead8 }
+         .board-row-wrapper.open .board-row { background: #ffffff; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; box-shadow: inset 0 -1px 0 rgba(0,0,0,0.02); padding: 10px 0; }
+         .day-separator {
+            grid-column: span 4;
+            background: #e6ebc7;
+            padding: 8px;
+            font-weight: bold;
+            position: relative;
+            z-index: 1; /* lower than details */
+          }
+         .schedule-details {
+           grid-column: span 4;
+           background: #eef4d6; /* pale green */
+           padding: 0 24px 28px 24px;
+           border-top: 0; /* visual continuity with open row */
+           position: relative;
+           z-index: 3; /* above separators */
+           margin-top: 6px;
+         }
+         .board-row-wrapper.open { position: relative; z-index: 4; }
+         /* add small separator below details when open to mimic design */
+         .board-row-wrapper.open + .schedule-details { margin-top: 4px; }
+         .schedule-topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#ffffff; border-radius:4px 4px 0 0; margin-bottom:12px; }
+         .top-left { display:flex; flex-direction:column; }
+         .top-time { color:#2f7030; font-weight:700 }
+         .top-dest { color:#213a21; font-size:0.95rem }
+         .top-center { color:#2f4f26; font-weight:700 }
+         .stops-title { margin:0; font-size:1.15rem; color:#2f4f26; padding-top:6px }
+         .stops-subtitle { color:#666; margin-bottom:12px }
+         .stops-headers { display:grid; grid-template-columns:90px 24px 1fr 100px; gap:8px; padding:8px 0; color:#566c4f; font-weight:600 }
+         .stops-list { list-style:none; padding:0; margin: 0 0 16px 0; }
+         .stops-list li { display:grid; grid-template-columns:90px 24px 1fr 100px; gap:8px; align-items:center; padding:8px 0; }
+         .stop-marker-cell { display:flex; align-items:center; justify-content:center; position:relative }
+         .stop-marker { display:inline-block; width:12px; height:12px; border-radius:50%; background:#fff; border:3px solid #267a3a; position:relative }
+         .stop-marker:after { content:""; position:absolute; left:50%; top:14px; transform:translateX(-50%); width:2px; height:220%; background:#b9c27a }
+         .stops-list li.last .stop-marker:after { display:none }
+         .station-badge { margin-left:8px; padding:2px 8px; border-radius:12px; font-size:0.75rem; color:#fff; display:inline-block; vertical-align:middle }
+         /* Bandeau exactement comme la maquette : pleine largeur, hauteur fixe, icône ronde, titre plus grand
+            - le contenu commence aligné après la colonne horaire (90px)
+            - triangle blanc en haut aligné sur la colonne horaire
+            - pas d'espace entre plusieurs bandeaux */
+         .line-info-banner { grid-column: span 4; position:relative; margin:0; width:100%; }
+         .line-info-banner + .line-info-banner { margin-top:0; }
+         .line-info-banner .banner-inner { display:flex; align-items:center; gap:12px; min-height:32px; padding:0 16px; box-sizing:border-box; padding-left:98px; }
+
+         /* triangle blanc pointant vers le haut, ajusté pour la hauteur réduite */
+         .line-info-banner:before { content:''; position:absolute; left:90px; top:-6px; width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-bottom:8px solid #fff; }
+
+         /* variante info (bleu pâle) */
+         .line-info-banner.info .banner-inner { background:#eaf6fb; color:#0b3b66; }
+         .line-info-banner.info .info-icon { background:#2f86d6 }
+
+         /* variante danger (rose pâle) */
+         .line-info-banner.danger .banner-inner { background:#faecec; color:#6b1f1a; }
+         .line-info-banner.danger .info-icon { background:#c94a42 }
+
+         /* icône ronde */
+         .line-info-banner .info-icon { width:28px; height:28px; min-width:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:14px; color:#fff }
+         .line-info-banner .info-icon wcs-mat-icon { font-size:16px; color:#fff }
+
+         /* texte : titre plus grand et alignement précis */
+         .line-info-banner .info-content { display:flex; flex-direction:column }
+         .line-info-banner .info-title { font-weight:600; font-size:18px; line-height:1; }
+         .line-info-banner .info-text { font-size:14px; margin-top:4px; opacity:0.95 }
+
+         /* retirer arrondis/ombres pour coller à la maquette */
+         .line-info-banner .banner-inner { border-radius:0; box-shadow:none; }
+         /* séparateur placé sous la zone de détail lorsqu'elle est ouverte */
+         .detail-separator { grid-column: span 4; height: 1px; background: #e6e6e6; margin: 6px 0 8px 0; }
+         /* variante légèrement visible pour thèmes sombres (fallback) */
+         @media (prefers-color-scheme: dark) {
+           .detail-separator { background: rgba(255,255,255,0.06); }
+         }
+
+         /* Styles pour ligne supprimée */
+         .board-row.cancelled .col-time,
+         .board-row.cancelled .col-destination,
+         .board-row.cancelled .col-mode {
+           color: #b00000;
+           text-decoration: line-through;
+         }
+         /* masquer la voie pour les suppressions */
+         .board-row.cancelled .col-platform { display: none; }
+
+         /* bannière rouge compacte collée à la ligne */
+         .cancel-banner {
+           grid-column: span 4;
+           display:flex;
+           align-items:center;
+           gap:8px;
+           background:#c9302c;
+           color:#fff;
+           padding:4px 8px; /* réduit pour être de la même taille que la ligne */
+           border-radius:0; /* coins carrés pour coller visuellement */
+           margin-top: -4px; /* remonte la bannière pour la coller au bas de la ligne */
+           font-weight:700;
+           font-size:0.95rem; /* taille proche de la ligne */
+           line-height:1;
+         }
+         /* inner wrapper pour s'assurer d'une seule ligne */
+         .cancel-banner .banner-inner { display:inline-flex; align-items:center; gap:8px; width:100%; }
+         .cancel-banner .info-icon {
+           width:20px;
+           height:20px;
+           min-width:20px;
+           display:flex;
+           align-items:center;
+           justify-content:center;
+           background:rgba(255,255,255,0.12);
+           border-radius:50%;
+           font-size:14px;
+         }
+         .cancel-banner .info-icon wcs-mat-icon { font-size:14px; color:#fff }
+         .cancel-banner .info-title {
+           font-weight:700;
+           font-size:0.95rem;
+           line-height:1;
+           white-space:nowrap;
+           overflow:hidden;
+           text-overflow:ellipsis;
+         }
+
+         /* Nouveau composant pour afficher le détail d'un sillon avec la liste complète des gares */
+         .sillon-detail-empty {
+           padding: 16px;
+           text-align: center;
+           color: #666;
+           font-style: italic;
+         }
+         .details-content {
+           padding: 0 24px 24px 24px;
+         }
+         .static-detail {
+           padding: 0;
+           border-radius: 8px;
+           background: #fff;
+           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+           margin-top: 8px;
+         }
+         .schedule-topbar {
+           display: grid;
+           grid-template-columns: 1fr 2fr 1fr;
+           align-items: center;
+           padding: 12px 16px;
+           background: #f9f9f9;
+           border-bottom: 1px solid #e6e6e6;
+         }
+         .top-left {
+           display: flex;
+           flex-direction: column;
+           align-items: flex-start;
+         }
+         .top-time {
+           font-size: 1.5rem;
+           line-height: 1;
+           color: #2f7030;
+           margin: 0;
+         }
+         .top-dest {
+           font-size: 1.1rem;
+           color: #213a21;
+           margin: 4px 0 0 0;
+         }
+         .top-center {
+           text-align: center;
+         }
+         .top-right {
+           text-align: right;
+         }
+         .schedule-info {
+           display: flex;
+           align-items: center;
+           gap: 8px;
+           background: #eaf6fb;
+           padding: 12px;
+           border-radius: 4px;
+           margin-bottom: 16px;
+         }
+         .info-icon {
+           color: #2f86d6;
+           font-size: 20px;
+         }
+         .stops-title {
+           margin: 0 0 8px 0;
+           font-size: 1.2rem;
+           color: #2f4f26;
+         }
+         .stops-subtitle {
+           margin: 0 0 16px 0;
+           color: #666;
+           font-size: 0.9rem;
+         }
+         .stops-headers {
+           display: grid;
+           grid-template-columns: 90px 24px 1fr 100px;
+           gap: 8px;
+           padding: 8px 0;
+           color: #566c4f;
+           font-weight: 600;
+         }
+         .stops-list {
+           list-style: none;
+           padding: 0;
+           margin: 0 0 16px 0;
+         }
+         .stops-list li {
+           display: grid;
+           grid-template-columns: 90px 24px 1fr 100px;
+           gap: 8px;
+           align-items: center;
+           padding: 8px 0;
+         }
+         .stop-marker-cell {
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           position: relative;
+         }
+         .stop-marker {
+           display: inline-block;
+           width: 12px;
+           height: 12px;
+           border-radius: 50%;
+           background: #fff;
+           border: 3px solid #267a3a;
+           position: relative;
+         }
+         .stop-marker:after {
+           content: "";
+           position: absolute;
+           left: 50%;
+           top: 14px;
+           transform: translateX(-50%);
+           width: 2px;
+           height: 220%;
+           background: #b9c27a;
+         }
+         .stops-section {
+           background: #eef3d3;
+           border-radius: 8px;
+           padding: 24px 32px;
+           margin-top: 12px;
+         }
+         .stops-section .stop-time {
+           font-family: Avenir;
+           font-weight: 400;
+           color: #26321f;
+           text-align: right;
+         }
+         .stops-section .redesign-stop-time {
+           font-family: Avenir;
+           font-weight: 400;
+           color: #26321f;
+           text-align: right;
+         }
+         .stops-section .redesign-stop-gare {
+           font-family: Avenir;
+           font-weight: 400;
+           color: #26321f;
+         }
+         .stops-section .redesign-stop-voie {
+           font-family: Avenir;
+           font-weight: 400;
+           color: #26321f;
+           text-align: right;
+         }
+         .stops-section .redesign-stop-timeline {
+           position: relative;
+           height: 44px;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           width: 36px;
+         }
+         .stops-section .redesign-stop-timeline:before {
+           content: '';
+           position: absolute;
+           left: 50%;
+           top: 6px;
+           bottom: 6px;
+           width: 4px;
+           background: #2b7030;
+           border-radius: 2px;
+           transform: translateX(-50%);
+         }
+         .stops-section .redesign-stop-timeline:after {
+           content: '';
+           position: absolute;
+           left: 50%;
+           top: 14px;
+           width: 12px;
+           height: 12px;
+           background: #2b7030;
+           border-radius: 50%;
+           z-index: 2;
+         }
+         .stops-section .stop-marker-cell {
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           position: relative;
+         }
+         .stops-section .stop-marker {
+           display: inline-block;
+           width: 12px;
+           height: 12px;
+           border-radius: 50%;
+           background: #fff;
+           border: 3px solid #267a3a;
+           position: relative;
+         }
+         .stops-section .stop-marker:after {
+           content: "";
+           position: absolute;
+           left: 50%;
+           top: 14px;
+           transform: translateX(-50%);
+           width: 2px;
+           height: 220%;
+           background: #b9c27a;
+         }
+         .stops-section li {
+           display: grid;
+           grid-template-columns: 90px 24px 1fr 100px;
+           gap: 8px;
+           align-items: center;
+           padding: 8px 0;
+         }
+         .stops-section li.last .stop-marker:after {
+           display: none;
+         }
+         .station-badge {
+           margin-left: 8px;
+           padding: 2px 8px;
+           border-radius: 12px;
+           font-size: 0.75rem;
+           color: #fff;
+           display: inline-block;
+           vertical-align: middle;
+         }
+         /* Ajout du style pour le bandeau de retard inline dans la colonne horaire */
+         .delay-banner-inline {
+           display: flex;
+           align-items: center;
+           gap: 6px;
+           background: #ffe5b0;
+           color: #a65c00;
+           border-radius: 12px;
+           padding: 2px 10px;
+           font-weight: 600;
+           font-size: 0.95rem;
+           margin-top: 4px;
+           margin-bottom: 2px;
+         }
+         .delay-banner-inline .info-icon {
+           color: #e67e22;
+           font-size: 18px;
+           display: flex;
+           align-items: center;
+         }
+         .delay-banner-inline .info-title {
+           font-weight: 600;
+           font-size: 0.95rem;
+         }
+         .delay-banner-below {
+           display: flex;
+           align-items: center;
+           gap: 8px;
+           background: #ffe5b0;
+           color: #a65c00;
+           border-radius: 12px;
+           padding: 8px 16px;
+           font-weight: 600;
+           font-size: 1rem;
+           margin: 8px 0 0 0;
+           box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+         }
+         .delay-banner-below .info-icon {
+           color: #e67e22;
+           font-size: 22px;
+           display: flex;
+           align-items: center;
+         }
+         .delay-banner-below .info-title {
+           font-weight: 600;
+           font-size: 1rem;
+         }
+       `}</style>
     </>
   );
 }
-

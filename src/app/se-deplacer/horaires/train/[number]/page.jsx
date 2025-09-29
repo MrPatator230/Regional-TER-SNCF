@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useMemo, useRef, useLayoutEffect } from 'react';
 import { useSearchParams, useParams, useRouter } from 'next/navigation';
+import { usePerturbations } from '@/app/hooks/usePerturbations';
 
 function useTrainTypeNames(){ const [map,setMap]=useState({}); useEffect(()=>{ let abort=false; (async()=>{ try{ const r=await fetch('/img/type/data.json'); if(!r.ok) return; const j=await r.json(); const m={}; (j.logos||[]).forEach(l=>{ if(l.slug&&l.name) m[l.slug.toLowerCase()]=l.name; }); if(!abort) setMap(m);} catch{} })(); return ()=>{ abort=true; }; },[]); return map; }
 
@@ -88,6 +89,10 @@ export default function TrainPage() {
   const [data,setData]=useState(null);
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(true);
+  // Tick qui force le rechargement quand les perturbations globales ont changé
+  const [perturbationsTick, setPerturbationsTick] = useState(0);
+  // Hook perturbations
+  const { perturbations } = usePerturbations();
   const typeNames = useTrainTypeNames();
   const router = useRouter();
 
@@ -109,9 +114,58 @@ export default function TrainPage() {
       finally { if(!abort) setLoading(false); }
     })();
     return ()=>{ abort=true; };
-  }, [trainNumber, dateParam]);
+  }, [trainNumber, dateParam, perturbationsTick]);
 
-  const firstSchedule = useMemo(()=> data?.schedules?.[0] || null, [data]);
+  // Écouteur global pour forcer le rechargement lorsque les perturbations changent
+  useEffect(()=>{
+    function onUpdate(){ setPerturbationsTick(t=>t+1); }
+    if(typeof window !== 'undefined' && window.addEventListener){
+      window.addEventListener('perturbations:updated', onUpdate);
+      return ()=> window.removeEventListener('perturbations:updated', onUpdate);
+    }
+    return undefined;
+  },[]);
+
+  // Enrichir les schedules avec les perturbations quotidiennes côté client (si présentes)
+  const enrichedData = useMemo(()=>{
+    if(!data || !Array.isArray(data.schedules)) return data;
+    try{
+      const enrichedSchedules = data.schedules.map(s => {
+        const p = (perturbations || []).find(pt => Number(pt.sillon_id) === Number(s.id) && (!pt.date || pt.date === (data.date || dateParam)));
+        if(!p) return s;
+        const out = { ...s };
+        if(p.type === 'suppression'){
+          out.cancelled = true;
+          out.cancel_reason = p.message || p.cause || out.cancel_reason || out.cancel_message || null;
+          out.cancel_message = out.cancel_reason;
+        }
+        if(p.type === 'retard'){
+          out.delay_min = Number(p.delay_minutes) || Number(p.delay_min) || 0;
+          out.delay_cause = p.cause || p.message || out.delay_cause || null;
+        }
+        if(p.type === 'modification'){
+          out.rerouted = true;
+          // appliquer times si fournis
+          if(p.mod_departure_time && out.current_station_id && Number(out.current_station_id) === Number(p.mod_departure_station_id)){
+            out.time = p.mod_departure_time;
+          }
+          if(p.mod_arrival_time && out.current_station_id && Number(out.current_station_id) === Number(p.mod_arrival_station_id)){
+            out.time = p.mod_arrival_time;
+          }
+          // removed stops handled server-side for full stop lists; keep flags client-side
+        }
+        return out;
+      });
+      return { ...data, schedules: enrichedSchedules };
+    }catch(e){ return data; }
+  }, [data, perturbations, dateParam]);
+
+  const firstSchedule = useMemo(()=>{
+    const source = enrichedData || data;
+    if(!source?.schedules || !source.schedules.length) return null;
+    const cancelled = source.schedules.find(s => s.cancelled);
+    return cancelled || source.schedules[0];
+  }, [enrichedData, data]);
 
   const effective = useMemo(()=>{
     if(!firstSchedule) return null;
@@ -468,15 +522,17 @@ export default function TrainPage() {
 
   const trainTypeName = useMemo(()=>{ const raw=firstSchedule?.train_type||''; return typeNames[raw?.toLowerCase?.()] || (raw? raw.toUpperCase(): 'TER'); },[firstSchedule?.train_type,typeNames]);
   const delayBanner = useMemo(()=>{
-    if(!effective?.delayed) return null;
-    const dep = effective.departure_delay_minutes ?? effective.delay_minutes;
-    const arr = effective.arrival_delay_minutes ?? effective.delay_minutes;
-    let txt;
-    if(dep!=null && arr!=null && dep!==arr) txt = `Retard estimé à ${dep} min au départ et ${arr} min à l'arrivée`;
-    else if(dep!=null) txt = `Retard estimé de ${dep} min`;
-    else txt = 'Retard estimé';
-    return <div className="delay-banner"><div className="delay-icon"><wcs-mat-icon icon="schedule" /></div><div className="delay-text">{txt}<div className="delay-train-ref">Train {firstSchedule?.train_type? trainTypeName: 'Train'} {firstSchedule?.train_number}</div></div><div className="delay-meta">{effective.stops?.length||0} <wcs-mat-icon icon="chevron_right" /></div></div>;
-  }, [effective, firstSchedule, trainTypeName]);
+    if(!effective?.delayed && !(effective?.delay_minutes > 0)) return null;
+    const delay = effective.delay_minutes || effective.departure_delay_minutes || effective.arrival_delay_minutes || 0;
+    return (
+      <div className="delay-banner-inline" role="status" aria-live="polite">
+        <span className="info-icon" aria-hidden="true">
+          <wcs-mat-icon icon="train_alert" />
+        </span>
+        <span className="info-title">Retardé : {delay} min</span>
+      </div>
+    );
+  }, [effective]);
 
   const perturbationBanners = useMemo(()=>{
     if(!effective) return null;
@@ -487,7 +543,7 @@ export default function TrainPage() {
     if(effective.rerouted){
       banners.push(<div key="reroute" className="delay-banner reroute"><div className="delay-icon"><wcs-mat-icon icon="alt_route" /></div><div className="delay-text">Itinéraire modifié<div className="delay-train-ref">Train {firstSchedule?.train_type? trainTypeName: 'Train'} {firstSchedule?.train_number}</div></div></div>);
     }
-    if(effective.delayed){ banners.push(delayBanner); }
+    if(effective.delayed || effective.delay_minutes > 0){ banners.push(delayBanner); }
     return banners.length? banners: null;
   }, [effective, delayBanner, firstSchedule, trainTypeName]);
 
@@ -697,6 +753,30 @@ export default function TrainPage() {
         .stop-meta.variant{ color:#0b4f7d; display:flex; align-items:center; gap:4px; font-weight:600; }
         /* Override spécifique pour la carte inline pour ne pas limiter la largeur */
         .rolling-card.rolling-card-inline{ max-width:none; width:fit-content; margin-left:auto; margin-right:auto; }
+        /* Ajout du style pour le bandeau de retard inline dans la colonne horaire */
+        .delay-banner-inline {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: #ffe5b0;
+          color: #a65c00;
+          border-radius: 12px;
+          padding: 2px 10px;
+          font-weight: 600;
+          font-size: 0.95rem;
+          margin-top: 4px;
+          margin-bottom: 2px;
+        }
+        .delay-banner-inline .info-icon {
+          color: #e67e22;
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+        }
+        .delay-banner-inline .info-title {
+          font-weight: 600;
+          font-size: 0.95rem;
+        }
       `}</style>
     </div>
   );

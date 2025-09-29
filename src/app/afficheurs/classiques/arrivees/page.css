@@ -1,0 +1,24 @@
+/* page.css (minimal) — styles principaux moved to component scoped styled-jsx
+   This file now contains only variables and a few fallbacks to avoid conflicts.
+*/
+:root{
+  --green-primary:#116938;
+  --green-dark:#0f5b33;
+  --green-alt:#156337;
+  --yellow:#ffe300;
+  --white:#ffffff;
+  --footer-bg:#0b3f22;
+  --clock-blue:#083b6b;
+}
+
+html,body{height:100%;margin:0;padding:0;}
+
+/* Keep body background as a fallback for non-JS rendering */
+body{background:var(--green-primary);color:var(--white);font-family:'Achemine', 'Avenir', Arial, sans-serif;}
+
+/* Minimal resets for elements used by the afficheur */
+.board-root, .board-wrapper{min-height:100vh}
+.rows{overflow:hidden}
+.row{box-sizing:border-box}
+
+/* Leave the rest to the component scoped styles (styled-jsx) */
