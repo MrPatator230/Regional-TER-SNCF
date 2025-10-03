@@ -11,9 +11,9 @@ import {achemineFont} from "@/fonts/achemine";
 
 export default function RootLayout({ children }) {
   // Détection du thème côté serveur (valeur par défaut)
-  const defaultTheme = "light";
+
   return (
-    <html lang="fr" data-theme={defaultTheme}>
+    <html lang="fr" >
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -27,7 +27,11 @@ export default function RootLayout({ children }) {
           }}
         />
         <link href="/css/bootstrap-sncf.min.css" rel="stylesheet" id={"light"} />
-
+        <link
+          href="/css/bootstrap-sncf.darkmode.min.css"
+          rel="stylesheet"
+          id={"dark"}
+        />
       </head>
       <body className="sncf-voyageurs" >
 

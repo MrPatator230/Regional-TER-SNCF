@@ -2,7 +2,7 @@
 
 @import "wcs-core/dist/wcs/wcs.css";
 /* styles.scss */
-@import "wcs-core/design-tokens/dist/sncf-voyageurs.css";
+@import "wcs-core/design-tokens/dist/sncf-reseau.css";
 /* FONTS */
 
 @font-face {

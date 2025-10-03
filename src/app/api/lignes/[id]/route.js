@@ -109,3 +109,21 @@ export async function DELETE(request, ctx) {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
+
+export async function GET(request, ctx){
+  try {
+    const { id: idParam } = await ctx.params; const id = Number(idParam); if(!id) return NextResponse.json({ error:'ID invalide' }, { status:400 });
+    const rows = await query(`SELECT l.id, l.depart_station_id, l.arrivee_station_id, l.exploitation_type, l.desservies,
+         sd.name AS depart_name, sa.name AS arrivee_name
+      FROM lignes l
+      LEFT JOIN stations sd ON sd.id=l.depart_station_id
+      LEFT JOIN stations sa ON sa.id=l.arrivee_station_id
+      WHERE l.id=? LIMIT 1`, [id]);
+    if(!rows.length) return NextResponse.json({ error:'Introuvable' }, { status:404 });
+    const lr = rows[0]; let dess=[]; try { dess = JSON.parse(lr.desservies||'[]'); } catch { dess=[]; }
+    dess = Array.isArray(dess)? dess: [];
+    const seqIds = [ lr.depart_station_id, ...dess, lr.arrivee_station_id ].filter((v,i,a)=> a.indexOf(v)===i);
+    let stations=[]; if(seqIds.length){ const placeholders=seqIds.map(()=>'?').join(','); const stRows = await query(`SELECT id,name FROM stations WHERE id IN (${placeholders})`, seqIds); const nameById={}; stRows.forEach(r=> nameById[r.id]=r.name); stations = seqIds.map(id=> ({ id, name: nameById[id]||('Gare '+id) })); }
+    return NextResponse.json({ ligne:{ id: lr.id, depart_station_id: lr.depart_station_id, arrivee_station_id: lr.arrivee_station_id, depart_name: lr.depart_name, arrivee_name: lr.arrivee_name, exploitation_type: lr.exploitation_type, desservies: dess, stations } });
+  } catch(e){ console.error('GET /api/lignes/[id] error', e); return NextResponse.json({ error:'Erreur serveur' }, { status:500 }); }
+}
