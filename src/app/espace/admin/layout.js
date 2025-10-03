@@ -1,6 +1,6 @@
 import "../../globals.css";
 import "wcs-core/dist/wcs/wcs.css";
-import "wcs-core/design-tokens/dist/sncf-voyageurs.css";
+import "wcs-core/design-tokens/dist/sncf-reseau.css";
 import "@sncf/bootstrap-sncf.communication/dist/bootstrap-sncf.css";
 import "@sncf/bootstrap-sncf.metier/dist/bootstrap-sncf.min.css";
 
@@ -18,14 +18,9 @@ export default function RootLayout({ children }) {
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <meta name="theme-color" content="#ffffff" />
             <title>Ferrovia Connect</title>
-            {/* Script: force le thème clair en admin */}
-            <script
-                dangerouslySetInnerHTML={{
-                    __html: `!function(){try{var t='light';var d=document.documentElement,b=document.body;if(d){d.dataset.theme=t}if(b){b.dataset.theme=t;b.classList.remove('dark')}var light=document.getElementById('light'),dark=document.getElementById('dark');if(light) light.disabled=false;if(dark) dark.disabled=true;var meta=document.querySelector('meta[name="theme-color"]');if(meta) meta.setAttribute('content','#ffffff');try{localStorage.setItem('theme','light')}catch(e){}}catch(e){}}();`,
-                }}
-            />
+
         </head>
-        <body className="sncf-voyageurs">
+        <body className="sncf-reseau">
         <wcs-galactic text="Espace administration">
 
             <wcs-button id="accessibility-menu-button" mode="clear" size="s">

@@ -5,9 +5,9 @@ import mysql from 'mysql2/promise';
 const config = {
   host: process.env.SCHEDULE_DB_HOST || process.env.DB_HOST || 'localhost',
   user: process.env.SCHEDULE_DB_USER || process.env.DB_USER || 'root',
-  password: process.env.SCHEDULE_DB_PASSWORD || process.env.DB_PASSWORD || '',
+  password: process.env.SCHEDULE_DB_PASSWORD || process.env.DB_PASSWORD || 'root',
   database: process.env.SCHEDULE_DB_DATABASE || 'horaires',
-  port: Number(process.env.SCHEDULE_DB_PORT || process.env.DB_PORT || 3306),
+  port: Number(process.env.SCHEDULE_DB_PORT || process.env.DB_PORT || 8889),
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

@@ -20,18 +20,7 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#ffffff" />
         <title>Ferrovia Connect</title>
         {/* Le script client peut toujours synchroniser le thème après le montage */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "!function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement&&(document.documentElement.dataset.theme=t);if(document.body){document.body.dataset.theme=t;document.body.classList.toggle('dark',t==='dark')}}catch(e){}}();",
-          }}
-        />
-        <link href="/css/bootstrap-sncf.min.css" rel="stylesheet" id={"light"} />
-        <link
-          href="/css/bootstrap-sncf.darkmode.min.css"
-          rel="stylesheet"
-          id={"dark"}
-        />
+
       </head>
       <body className="sncf-voyageurs" >
 

@@ -4,19 +4,25 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Fichier Test d'import de sillons.">
+    <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Update database configuration and enhance perturbation handling in schedules">
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/layout.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/layout.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/globals.css" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/globals.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/layout.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/layout.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/prochains-departs/[id]/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/prochains-departs/[id]/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db-schedule.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db-schedule.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ComposerSettings">
-    <execution />
-  </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF" />
+    <option name="UPDATE_TYPE" value="REBASE" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
   &quot;lastFilter&quot;: {
@@ -24,12 +30,15 @@
     &quot;assignee&quot;: &quot;MrPatator230&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/MrPatator230/Regional-TER-SNCF.git",
-    "accountId": "d2f9d647-103e-4235-a804-837543268fc0"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/MrPatator230/Regional-TER-SNCF.git&quot;,
+    &quot;accountId&quot;: &quot;79d95c15-8e74-4301-8142-9d777fa30afc&quot;
   }
-}]]></component>
+}</component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 0
 }</component>
@@ -51,16 +60,26 @@
     "js.debugger.nextJs.config.created.client": "true",
     "js.debugger.nextJs.config.created.server": "true",
     "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/Users/mgrillot/Documents/développement WEB/Regional-TER-SNCF",
+    "last_opened_file_path": "/Users/mgrillot/Documents/développement WEB/Regional-TER-SNCF/public/img/brand",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.lookFeel",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "advanced.settings",
+    "ts.external.directory.path": "/Users/mgrillot/Library/Application Support/JetBrains/IntelliJIdea2025.2/plugins/javascript-plugin/jsLanguageServicesImpl/external",
     "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/brand" />
+      <recent name="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF" />
+    </key>
+  </component>
   <component name="RunManager" selected="npm.Next.js: server-side">
     <configuration name="Next.js: debug client-side" type="JavascriptDebugType" uri="http://localhost:3000/">
       <method v="2" />
@@ -79,8 +98,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.23892.409" />
-        <option value="bundled-js-predefined-d6986cc7102b-e03c56caf84a-JavaScript-IU-252.23892.409" />
+        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.26199.169" />
+        <option value="bundled-js-predefined-d6986cc7102b-9c94529fcfe0-JavaScript-IU-252.26199.169" />
       </set>
     </attachedChunks>
   </component>
@@ -93,7 +112,30 @@
       <updated>1757521804914</updated>
       <workItem from="1757521806417" duration="15520000" />
       <workItem from="1757763142213" duration="5368000" />
-      <workItem from="1757789656738" duration="3166000" />
+      <workItem from="1757789656738" duration="5829000" />
+      <workItem from="1758143832688" duration="1083000" />
+      <workItem from="1758191378249" duration="43545000" />
+      <workItem from="1758283086077" duration="18744000" />
+      <workItem from="1758649645388" duration="3000" />
+      <workItem from="1758820073187" duration="3597000" />
+      <workItem from="1758830675240" duration="2614000" />
+      <workItem from="1758833453410" duration="297000" />
+      <workItem from="1758902118189" duration="1359000" />
+      <workItem from="1758903538589" duration="11961000" />
+      <workItem from="1758916415507" duration="9106000" />
+      <workItem from="1758972483752" duration="14725000" />
+      <workItem from="1758991279996" duration="18095000" />
+      <workItem from="1759065105801" duration="29387000" />
+      <workItem from="1759098311745" duration="307000" />
+      <workItem from="1759098638119" duration="211000" />
+      <workItem from="1759098884967" duration="101000" />
+      <workItem from="1759167116089" duration="7694000" />
+      <workItem from="1759216432155" duration="1330000" />
+      <workItem from="1759309810071" duration="26697000" />
+      <workItem from="1759356384280" duration="156000" />
+      <workItem from="1759403272991" duration="9775000" />
+      <workItem from="1759437244130" duration="8708000" />
+      <workItem from="1759520789290" duration="2894000" />
     </task>
     <task id="LOCAL-00001" summary="Alpha V4.0.5 // INITIAL COMMIT">
       <option name="closed" value="true" />
@@ -119,7 +161,31 @@
       <option name="project" value="LOCAL" />
       <updated>1757792769318</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Fichier Test d'import de sillons.">
+      <option name="closed" value="true" />
+      <created>1757794073012</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1757794073012</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Ajout EVA Arrivées, intégration perturbations quotidiennes, corrections affichage et styles afficheur&#10;&#10;- Ajout de l'afficheur EVA Arrivées (README, page.jsx, page.css, test_eva_arrivals.js, Marquee.jsx)&#10;- Intégration des perturbations quotidiennes de sillon dans l'API et l'affichage (route.js, usePerturbations.js, page.js)&#10;- Amélioration du parsing des arrêts (schedules-service.js, horaires_scheme.sql)&#10;- Synchronisation des quais avec la page d'attribution (route.js)&#10;- Ajout helpers et scripts SQL pour migration days_mask (migrate_days_mask_no_funcs.sql, migrate_days_mask_final.sql, test-days-mask.js)&#10;- Corrections et enrichissements des données types/logos (region.json)&#10;- Mise à jour des dépendances (package.json, package-lock.json)&#10;- Ajustements visuels et styles pour l'afficheur classique (globals.css, page.css)&#10;- Nettoyage et corrections diverses (layout.js, InfoBanner.jsx, stationUtils.js, query.js, getSchedules.js, useProchainsHoraires.js, events.js, db.js, data.json)">
+      <option name="closed" value="true" />
+      <created>1759177462323</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1759177462323</updated>
+    </task>
+    <task id="LOCAL-00006" summary="Ajout de la logique de résolution des identifiants de sillons et intégration des perturbations dans les horaires">
+      <option name="closed" value="true" />
+      <created>1759521206380</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1759521206380</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -140,6 +206,15 @@
     <MESSAGE value="Alpha V4.0.5 // INITIAL COMMIT" />
     <MESSAGE value="Patch Affichage des sillons en fonction des jours de circulations et des perturbations." />
     <MESSAGE value="Fichier Test d'import de sillons." />
-    <option name="LAST_COMMIT_MESSAGE" value="Fichier Test d'import de sillons." />
+    <MESSAGE value="Ajout EVA Arrivées, enrichissement perturbations quotidiennes, migration days_mask, corrections affichage et plateformes&#10;&#10;- Finalisation de l'Afficheur Classiques&#10;- Ajout de l'afficheur EVA pour les arrivées (README, page.css, test, intégration page.jsx)&#10;&#10;- Prise en compte des perturbations quotidiennes (schedule_daily_variants) dans l'API et le planner&#10;- Migration SQL pour normaliser days_mask (scripts .sql, helpers de parsing et tests)&#10;- Correction du parsing des arrêts (stops_json) pour supporter le nouveau format hiérarchique&#10;- Amélioration de la fusion des quais (schedule_platforms) dans l'API sillon&#10;- Mise à jour des dépendances (net, tls)&#10;- Corrections de noms et labels dans region.json&#10;- Nettoyage layout.js (suppression darkmode), ajustements UI globals.css/page.css&#10;- Ajout utilitaires, scripts de test et helpers divers" />
+    <MESSAGE value="Ajout EVA Arrivées, intégration perturbations quotidiennes, corrections affichage et styles afficheur&#10;&#10;- Ajout de l'afficheur EVA Arrivées (README, page.jsx, page.css, test_eva_arrivals.js, Marquee.jsx)&#10;- Intégration des perturbations quotidiennes de sillon dans l'API et l'affichage (route.js, usePerturbations.js, page.js)&#10;- Amélioration du parsing des arrêts (schedules-service.js, horaires_scheme.sql)&#10;- Synchronisation des quais avec la page d'attribution (route.js)&#10;- Ajout helpers et scripts SQL pour migration days_mask (migrate_days_mask_no_funcs.sql, migrate_days_mask_final.sql, test-days-mask.js)&#10;- Corrections et enrichissements des données types/logos (region.json)&#10;- Mise à jour des dépendances (package.json, package-lock.json)&#10;- Ajustements visuels et styles pour l'afficheur classique (globals.css, page.css)&#10;- Nettoyage et corrections diverses (layout.js, InfoBanner.jsx, stationUtils.js, query.js, getSchedules.js, useProchainsHoraires.js, events.js, db.js, data.json)" />
+    <MESSAGE value="Ajout de la logique de résolution des identifiants de sillons et intégration des perturbations dans les réponses API" />
+    <MESSAGE value="Ajout de la logique de résolution des identifiants de sillons et intégration des perturbations dans les horaires" />
+    <MESSAGE value="Update database configuration and enhance perturbation handling in schedules" />
+    <option name="LAST_COMMIT_MESSAGE" value="Update database configuration and enhance perturbation handling in schedules" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>

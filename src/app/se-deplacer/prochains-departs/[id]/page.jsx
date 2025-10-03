@@ -73,28 +73,72 @@ export default function BoardPage() {
   const enrichSillonsWithDailyPerturbations = (sillons, perturbations) => {
     if (!Array.isArray(sillons) || !sillons.length) return sillons || [];
     if (!Array.isArray(perturbations) || !perturbations.length) return sillons;
+
+    // helpers locaux
+    function safeToStr(v){ if(v === undefined || v === null) return ''; try{ return String(v).trim(); }catch(e){ return ''; } }
+    function normalizeIdNum(v){ if(v === undefined || v === null) return null; const n = Number(v); return Number.isNaN(n) ? null : n; }
+
+    // Mappe une perturbation quotidienne vers status_key/status/delay (même logique que côté API serveur)
+    function mapPerturbToStatusLocal(match){
+      if(!match) return { status_key: 'on_time', status: "A L'HEURE", delay: null, cancelledFlag: false };
+      const rawType = safeToStr(match.type || match.titre || match.title || (match.data && (match.data.type || match.data.titre)) || '').toLowerCase();
+      const cancelledFlag = !!match.cancelled || !!match.cancelled_at || !!(match.data && match.data.cancelled);
+      const isCancelled = rawType.includes('supprim') || rawType.includes('annul') || rawType.includes('cancel') || cancelledFlag;
+      const isDelay = rawType.includes('retard') || rawType.includes('delay') || rawType.includes('late');
+      const isSubst = rawType.includes('substitut') || rawType.includes('remplac') || rawType.includes('substitution');
+      const isIncident = rawType.includes('incident') || rawType.includes('panne');
+      const isModified = rawType.includes('modif') || rawType.includes('modification') || rawType.includes('modifié');
+      const isAdvanced = rawType.includes('avance') || rawType.includes('avancé') || rawType.includes('avancee');
+
+      let status_key = 'on_time';
+      let status = "A L'HEURE";
+      let delay = null;
+
+      if(isCancelled){ status_key = 'cancelled'; status = 'supprimé'; }
+      else if(isDelay){
+        status_key = 'delayed';
+        status = 'retardé';
+        delay = match.delay_minutes || match.delay_min || match.delay || match.retard_min || (match.data && (match.data.delay_minutes || match.data.delay_min || match.data.delay || match.data.retard_min)) || null;
+        if(typeof delay === 'string' && delay.trim() === '') delay = null;
+        if(delay != null) delay = Number(delay) || null;
+      } else if(isSubst){ status_key = 'substituted'; status = 'remplacé'; }
+      else if(isIncident){ status_key = 'incident'; status = 'incident'; }
+      else if(isModified){ status_key = 'modified'; status = 'modifié'; }
+      else if(isAdvanced){ status_key = 'advanced'; status = 'avancé'; }
+      else if(cancelledFlag){ status_key = 'cancelled'; status = 'supprimé'; }
+
+      return { status_key, status, delay, cancelledFlag };
+    }
+
     return sillons.map((sillon) => {
-      const sId = Number(sillon.id);
+      const sId = normalizeIdNum(sillon.id);
       const sDate = String(sillon.date || '').slice(0,10);
       const perturbation = perturbations.find((p) => {
-        const pSid = Number(p.schedule_id ?? p.sillon_id ?? p.sillonId ?? p.sillonId);
+        const pSid = normalizeIdNum(p.schedule_id ?? p.sillon_id ?? p.sillonId ?? p.sillonId);
         const pDate = p.date ? String(p.date).slice(0,10) : null;
         return pSid && sId && pSid === sId && pDate && sDate && pDate === sDate;
       });
+
       if (perturbation) {
-        const isSupp = String(perturbation.type || '').toLowerCase() === 'suppression' || String(perturbation.type || '').toLowerCase() === 'supprimé';
-        const isDelay = String(perturbation.type || '').toLowerCase() === 'retard';
+        const mapped = mapPerturbToStatusLocal(perturbation);
+        const isSupp = mapped.status_key === 'cancelled';
+        const isDelay = mapped.status_key === 'delayed';
+        const delayVal = mapped.delay != null ? Number(mapped.delay) : (perturbation.delay_minutes != null ? Number(perturbation.delay_minutes) : (sillon.delay_minutes != null ? Number(sillon.delay_minutes) : (sillon.delay_min != null ? Number(sillon.delay_min) : null)));
+
         return {
           ...sillon,
           // flag utilisé par le rendu
           cancelled: isSupp || !!sillon.cancelled,
-          // définir les deux variantes de nommage utilisées dans l'app
-          delay_minutes: (perturbation.delay_minutes != null ? Number(perturbation.delay_minutes) : (sillon.delay_minutes != null ? Number(sillon.delay_minutes) : (sillon.delay_min != null ? Number(sillon.delay_min) : 0))),
-          delay_min: (perturbation.delay_minutes != null ? Number(perturbation.delay_minutes) : (sillon.delay_min != null ? Number(sillon.delay_min) : (sillon.delay_minutes != null ? Number(sillon.delay_minutes) : 0))),
+          // mettre à jour les champs de retard (legacy et actuels)
+          delay_minutes: delayVal != null ? delayVal : (sillon.delay_minutes != null ? Number(sillon.delay_minutes) : 0),
+          delay_min: delayVal != null ? delayVal : (sillon.delay_min != null ? Number(sillon.delay_min) : 0),
           delay_cause: perturbation.cause || perturbation.message || sillon.delay_cause || null,
           cancel_message: perturbation.message || perturbation.cause || sillon.cancel_message || null,
-          // legacy status field (ne pas casser les usages existants)
-          status: isSupp ? 'supprimé' : (isDelay ? 'retard' : (sillon.status || null)),
+          // canonical fields pour usage plus moderne
+          status_key: mapped.status_key,
+          status: mapped.status,
+          // garder un champ legacy pour compatibilité
+          status_legacy: isSupp ? 'supprimé' : (isDelay ? 'retard' : (sillon.status || null)),
         };
       }
       return sillon;
@@ -135,6 +179,43 @@ export default function BoardPage() {
     } catch {
       return isoDate;
     }
+  };
+
+  // helper: retourne la meilleure cause de suppression disponible pour un horaire
+  const getCancelCause = (sched) => {
+    if (!sched) return 'Conditions de départ non réunies';
+
+    // Priorités de champs connus envoyés par l'API / enrichissements clients
+    const candidates = [
+      sched.cancel_reason,
+      sched.cancel_message,
+      sched.cancel_cause,
+      sched.cause,
+      sched.info,         // souvent "Supprimé – <cause>" côté API
+      sched.info_message,
+      sched.message,
+    ].filter(Boolean);
+
+    // Tenter d'extraire une cause depuis des chaînes du type "Supprimé – <cause>" ou "Supprimé - <cause>" ou "Supprimé: <cause>"
+    const extractFromInfo = (text) => {
+      if (typeof text !== 'string') return null;
+      const m = text.match(/supprim[eé]\s*(?:–|-|:)\s*(.+)/i);
+      if (m && m[1]) return m[1].trim();
+      return null;
+    };
+
+    for (const c of candidates) {
+      const extracted = extractFromInfo(c);
+      if (extracted && !/conditions de départs? non réunies/i.test(extracted)) return extracted;
+    }
+
+    // Retourner le premier candidat non générique
+    for (const c of candidates) {
+      if (typeof c === 'string' && !/conditions de départs? non réunies/i.test(c)) return c.trim();
+    }
+
+    // fallback
+    return 'Conditions de départ non réunies';
   };
 
   return (
@@ -205,6 +286,41 @@ export default function BoardPage() {
                       // Récupérer perturbations ligne actives (côté client) pour afficher la carte d'info
                       const linePerts = getPerturbationsForLine(schedule.ligne_id, schedule.time, day.date) || [];
                       const linePert = linePerts.length ? linePerts[0] : null;
+                       // Avoid double display: filter out origin/terminus from the stops list
+                      const allStops = Array.isArray(schedule.stops) ? schedule.stops : [];
+                      const depName = String(schedule.departureStation || schedule.departure_station || schedule.origin || '').trim().toLowerCase();
+                      const arrName = String(schedule.arrivalStation || schedule.arrival_station || schedule.destination || '').trim().toLowerCase();
+                      // filter out explicit origin/terminus matches
+                      const filtered = allStops.filter(s => {
+                        const name = String(s.station || s.station_name || '').trim().toLowerCase();
+                        if(!name) return false;
+                        if(depName && name === depName) return false;
+                        if(arrName && name === arrName) return false;
+                        return true;
+                      });
+                      // deduplicate by station name (preserve first occurrence)
+                      const seen = new Set();
+                      const stopsToRender = [];
+                      for(const s of filtered){
+                        const name = String(s.station || s.station_name || '').trim().toLowerCase();
+                        if(seen.has(name)) continue;
+                        seen.add(name);
+                        stopsToRender.push(s);
+                      }
+                      
+                      // Ensure origin and terminus are visible in the detail view
+                      const originName = String(schedule.origin || schedule.departureStation || schedule.departure_station || '').trim();
+                      const terminusName = String(schedule.destination || schedule.arrivalStation || schedule.arrival_station || '').trim();
+                      const originTime = schedule.schedule_departure_time || schedule.departure_time || schedule.time || '';
+                      const terminusTime = schedule.schedule_arrival_time || schedule.arrival_time || '';
+                      const originStop = originName ? { station_name: originName, station_id: `origin_${schedule.id}`, time: originTime, origin: true, platform: schedule.platform || '' } : null;
+                      const terminusStop = terminusName ? { station_name: terminusName, station_id: `dest_${schedule.id}`, time: terminusTime, dest: true, platform: schedule.platform || '' } : null;
+                      // Build final list to render: origin -> intermediates -> terminus
+                      const displayStops = [];
+                      if (originStop) displayStops.push(originStop);
+                      for (const s of stopsToRender) displayStops.push(s);
+                      if (terminusStop) displayStops.push(terminusStop);
+
                       return (
                         <React.Fragment key={schedule.id}>
                           <div className={`board-row-wrapper ${selectedScheduleKey === `${String(schedule.id)}_${day.date}` ? 'open' : ''}`} aria-expanded={selectedScheduleKey === `${String(schedule.id)}_${day.date}`}>
@@ -263,8 +379,8 @@ export default function BoardPage() {
                                     <wcs-mat-icon icon="warning" />
                                   </div>
                                   <div className="info-content">
-                                    <div className="info-title">Sillon supprimé</div>
-                                    {schedule.cancel_message && <div className="info-text">{schedule.cancel_message}</div>}
+                                    <div className="info-title">Supprimé</div>
+                                    {/* Afficher la cause de suppression : utiliser le helper getCancelCause */}
                                   </div>
                                 </div>
                               </div>
@@ -327,7 +443,7 @@ export default function BoardPage() {
                                         <div className="hero-icon"><wcs-mat-icon icon="error_outline" /></div>
                                         <div className="hero-body">
                                           <div className="hero-title">Supprimé</div>
-                                          <div className="hero-sub">{schedule.cancel_reason || 'Conditions de départ non réunies'}</div>
+                                          <div className="hero-sub">{getCancelCause(schedule)}</div>
                                         </div>
                                       </div>
 
@@ -354,9 +470,9 @@ export default function BoardPage() {
 
                                       {Array.isArray(schedule.stops) && schedule.stops.length > 0 ? (
                                         <ul className="stops-list cancelled-list">
-                                          {schedule.stops.map((stop, i) => {
+                                          {displayStops.map((stop, i) => {
                                             const displayedTime = stop.time || stop.departure_time || stop.arrival_time || '-';
-                                            const isLast = i === schedule.stops.length - 1;
+                                            const isLast = i === displayStops.length - 1;
                                             return (
                                               <li key={`${schedule.id}_${stop.station_id || i}_${i}`} className={`${isLast ? 'last' : ''}`}>
                                                 {/* Garder le même markup que les arrêts normaux pour réutiliser la barre verticale */}
@@ -365,7 +481,7 @@ export default function BoardPage() {
                                                 <div className="stop-name">
                                                   <span className="struck">{stop.station_name}</span>
                                                   {/* raison affichée sous le nom de la gare */}
-                                                  <div className="removed-sub">{schedule.cancel_reason || 'Conditions de départ non réunies'}</div>
+                                                  <div className="removed-sub">{getCancelCause(schedule)}</div>
                                                 </div>
                                                 <div className="stop-platform">-</div>
                                               </li>
@@ -399,7 +515,7 @@ export default function BoardPage() {
 
                                       {Array.isArray(schedule.stops) && schedule.stops.length > 0 ? (
                                         <ul className="stops-list">
-                                          {schedule.stops.map((stop, i) => {
+                                          {displayStops.map((stop, i) => {
                                             const isOrigin = !!stop.origin;
                                             const isDest = !!stop.dest;
                                             const displayedTime = isOrigin
@@ -409,7 +525,7 @@ export default function BoardPage() {
                                                 : (stop.time || stop.arrival_time || stop.departure_time || '-'));
 
                                             return (
-                                              <li key={`${schedule.id}_${stop.station_id || i}_${i}`} className={`${i === schedule.stops.length - 1 ? 'last' : ''} ${stop.origin ? 'origin' : ''} ${stop.dest ? 'dest' : ''}`}>
+                                              <li key={`${schedule.id}_${stop.station_id || i}_${i}`} className={`${i === displayStops.length - 1 ? 'last' : ''} ${stop.origin ? 'origin' : ''} ${stop.dest ? 'dest' : ''}`}>
                                                 <div className="stop-time">{displayedTime}</div>
                                                 <div className="stop-marker-cell"><span className="stop-marker" aria-hidden="true"></span></div>
                                                 <div className="stop-name">
@@ -419,8 +535,8 @@ export default function BoardPage() {
                                                 </div>
                                                 <div className="stop-platform">{stop.platform || "-"}</div>
                                               </li>
-                                            );
-                                          })}
+                                             );
+                                           })}
                                         </ul>
                                       ) : (
                                         <div className="no-stops">Détails non disponibles pour cet horaire.</div>
