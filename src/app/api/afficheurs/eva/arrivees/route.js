@@ -72,25 +72,63 @@ function parseStopsJson(raw){
 // Convertit le bitmask (bit0 = Lundi ... bit6 = Dimanche)
 // en tableau JS de jours [0=Dimanche,1=Lundi,...6=Samedi]
 function maskToServiceDays(mask, listStr){
-    // Si une liste explicite est fournie (format '1;2;3' avec 1=Lundi..7=Dimanche), la privilégier
+    // helper: convertir parts (strings) en jours JS (0..6)
+    const partsToJs = (parts) => {
+        const out = [];
+        const map = { lun:1, mar:2, mer:3, jeu:4, ven:5, sam:6, dim:7, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:7 };
+        (parts || []).forEach(p => {
+            if(p === null || p === undefined) return;
+            const s = String(p).trim();
+            if(!s) return;
+            if(/^[0-9]+$/.test(s)){
+                let n = Number(s);
+                // accepter format 0..6 -> convertir en 1..7
+                if(n >= 0 && n <= 6) n = n + 1;
+                if(n >= 1 && n <= 7){
+                    const js = (n === 7) ? 0 : n; // 7 -> 0 (Dimanche), 1..6 -> same
+                    out.push(js);
+                }
+            }else{
+                const key = s.slice(0,3).toLowerCase();
+                if(map[key]){
+                    const n = map[key];
+                    const js = (n === 7) ? 0 : n;
+                    out.push(js);
+                }
+            }
+        });
+        return Array.from(new Set(out)).sort((a,b)=>a-b);
+    };
+
+    // 1) si une liste explicite est fournie (format '1;2;3' ou 'lun;mer')
     if(listStr){
         try{
-            const parts = String(listStr||'').split(/[;,\s]+/).map(s=>Number(s)).filter(n=> Number.isFinite(n) && n>=1 && n<=7);
-            const js = parts.map(n => n===7 ? 0 : n); // 7->0 (Dimanche), 1->1 (Lundi)
-            return Array.from(new Set(js)).sort((a,b)=>a-b);
+            const s = String(listStr || '').trim();
+            if(/^[01]{7}$/.test(s)){
+                // binaire '1010101' où index 0 = lundi
+                const out = [];
+                for(let i=0;i<7;i++){ if(s[i] === '1') out.push((i+1)%7); }
+                return Array.from(new Set(out)).sort((a,b)=>a-b);
+            }
+            const parts = s.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean);
+            const nums = partsToJs(parts);
+            if(nums && nums.length) return nums;
         }catch(e){ /* fallback to mask */ }
     }
+
+    // 2) si mask non défini => aucune info
     if(mask === null || mask === undefined) return null;
-    const m = Number(mask) || 0;
+
+    // 3) essayer d'interpréter mask comme entier bitmask
+    const m = Number(mask);
+    if(Number.isNaN(m)) return null;
     const days = [];
     for(let bit=0; bit<7; bit++){
-        if(m & (1<<bit)){
-            // bit0 => Lundi (JS day 1). Mapping : jsDay = (bit+1)%7
-            const jsDay = (bit + 1) % 7;
+        if((m >> bit) & 1){
+            const jsDay = (bit + 1) % 7; // bit0 = lundi -> js 1, bit6 = dimanche -> js 0
             days.push(jsDay);
         }
     }
-    // return array triée unique
     return Array.from(new Set(days)).sort((a,b)=>a-b);
 }
 

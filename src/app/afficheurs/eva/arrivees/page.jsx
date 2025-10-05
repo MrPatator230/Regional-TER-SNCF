@@ -28,68 +28,118 @@ export default function AfficheurEVAArrivees(){
   const gareNormalized = normStr(gare);
 
   // Vérifie si un train circule sur la date refDate en regardant un éventuel champ days/service_days
-  function maskToServiceDays(mask){
+  function maskToServiceDays(mask, listStr){
+    // helper: convertir parts (strings) en jours JS (0..6)
+    const partsToJs = (parts) => {
+      const out = [];
+      const map = { lun:1, mar:2, mer:3, jeu:4, ven:5, sam:6, dim:7, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:7 };
+      (parts || []).forEach(p => {
+        if(p === null || p === undefined) return;
+        const s = String(p).trim(); if(!s) return;
+        if(/^[0-9]+$/.test(s)){
+          let n = Number(s);
+          if(n >= 0 && n <= 6) n = n + 1; // accepter 0..6 -> 1..7
+          if(n >= 1 && n <= 7){ const js = (n === 7) ? 0 : n; out.push(js); }
+        } else {
+          const key = s.slice(0,3).toLowerCase(); if(map[key]){ const n = map[key]; const js = (n === 7) ? 0 : n; out.push(js); }
+        }
+      });
+      return Array.from(new Set(out)).sort((a,b)=>a-b);
+    };
+
+    // 1) si listStr fourni (privilégier)
+    if(listStr){
+      try{
+        const s = String(listStr||'').trim();
+        if(/^[01]{7}$/.test(s)){
+          const out = [];
+          for(let i=0;i<7;i++){ if(s[i] === '1') out.push((i+1)%7); }
+          return Array.from(new Set(out)).sort((a,b)=>a-b);
+        }
+        const parts = s.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean);
+        const nums = partsToJs(parts);
+        if(nums && nums.length) return nums;
+      }catch(e){/* fallback */}
+    }
+
+    // 2) mask absent
     if(mask === null || mask === undefined) return null;
-    const m = Number(mask) || 0;
+
+    // 3) interpréter mask comme entier bitmask
+    const m = Number(mask);
+    if(Number.isNaN(m)) return null;
     const days = [];
     for(let bit=0; bit<7; bit++){
-      if(m & (1<<bit)){
-        // bit0 dans la DB = Lundi. Mapping vers JS day (0=Dimanche..6=Samedi)
-        const jsDay = (bit + 1) % 7;
-        days.push(jsDay);
-      }
+      if((m >> bit) & 1){ const jsDay = (bit + 1) % 7; days.push(jsDay); }
     }
     return Array.from(new Set(days)).sort((a,b)=>a-b);
   }
 
   // Vérifie si un train circule sur la date refDate en regardant un éventuel champ days/service_days
   function matchesServiceDays(item, refDate){
-    const ds = item.service_days || item.days || item.operating_days || item.days_mask || null;
+    // candidates : privilégier les champs explicitement listés
+    const ds = item.service_days ?? item.days ?? item.operating_days ?? item.days_mask_list ?? item.days_mask ?? item.daysMask ?? item.running_days ?? null;
     if(ds === null || ds === undefined) return true; // pas d'info -> on assume circulation
+
     const wd = refDate.getDay(); // 0=dimanche
 
-    // si bitmask numérique (days_mask) — convertir en tableau JS days
-    if(typeof ds === 'number' || (typeof ds === 'string' && /^\d+$/.test(ds))){
-      const mask = Number(ds);
-      const svc = maskToServiceDays(mask);
-      if(!svc || svc.length===0) return true;
-      return svc.includes(wd);
-    }
-
-    // si tableau
-    if(Array.isArray(ds)){
-      if(ds.length === 0) return true;
-      // gérer tableaux de nombres 1..7 (1=Lundi .. 7=Dimanche) ou tableaux de chaînes numériques
-      const allNumeric = ds.every(x => typeof x === 'number' || (typeof x === 'string' && /^\d+$/.test(x)));
-      if(allNumeric){
-        const mapped = ds.map(x => {
-          const n = Number(x);
-          if(Number.isNaN(n)) return null;
-          return n % 7; // maps 7->0 (Dimanche), 1->1 (Lundi), etc.
-        }).filter(x => x !== null);
-        if(mapped.length === 0) return true;
-        return mapped.includes(wd);
+    // helper pour parser des valeurs variées en tableau JS-days
+    const parseCandidateToJs = (value) => {
+      if(value === null || value === undefined) return null;
+      // tableau
+      if(Array.isArray(value)){
+        const parts = value.map(v => String(v).trim());
+        // si tableau de nombres -> convertir
+        return partsToJsLocal(parts);
       }
-
-    // range format
-        // ici on suppose que les nombres sont déjà en JS-day (0=Dimanche..6=Samedi)
-    const dayNamesFr = ['dim','lun','mar','mer','jeu','ven','sam'];
-    const dayNamesEn = ['sun','mon','tue','wed','thu','fri','sat'];
-
-      const a = normStr(range[1]).slice(0,3);
-      const b = normStr(range[2]).slice(0,3);
-      const idxA = dayNamesFr.indexOf(a) !== -1 ? dayNamesFr.indexOf(a) : dayNamesEn.indexOf(a);
-      const idxB = dayNamesFr.indexOf(b) !== -1 ? dayNamesFr.indexOf(b) : dayNamesEn.indexOf(b);
-      if(idxA !== -1 && idxB !== -1){
-        if(idxA <= idxB) return wd >= idxA && wd <= idxB;
-        return wd >= idxA || wd <= idxB; // wrap
+      if(typeof value === 'number'){
+        return maskToServiceDays(value, null);
       }
-    }
-    // list comma separated
-    const parts = s.split(/[;,\s]+/).map(p=>p.slice(0,3));
-    const all = parts.map(p=>{ const np = p.slice(0,3); const idx = dayNamesFr.indexOf(np)!==-1?dayNamesFr.indexOf(np):dayNamesEn.indexOf(np); return idx; }).filter(x=> x!==-1 && x!==undefined);
-    if(all.length) return all.includes(wd);
-    return true; // fallback permissive
+      if(typeof value === 'string'){
+        const s = value.trim();
+        if(s === '') return null;
+        if(/^[01]{7}$/.test(s)){
+          const out = []; for(let i=0;i<7;i++){ if(s[i] === '1') out.push((i+1)%7); } return out;
+        }
+        if(/[;,\s]/.test(s)){
+          const parts = s.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean); return partsToJsLocal(parts);
+        }
+        if(/^[0-9]+$/.test(s)){
+          // soit jour unique '1'..'7' soit bitmask entier
+          if(/^[1-7]$/.test(s)){
+            const n = Number(s); const js = (n===7)?0:n; return [js];
+          }
+          const asNum = Number(s); if(!Number.isNaN(asNum)) return maskToServiceDays(asNum, null);
+        }
+        // texte libre (noms de jours)
+        const parts = s.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean); return partsToJsLocal(parts);
+      }
+      return null;
+    };
+
+    // local partsToJs (copie légère)
+    const partsToJsLocal = (parts) => {
+      const out = [];
+      const map = { lun:1, mar:2, mer:3, jeu:4, ven:5, sam:6, dim:7, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:7 };
+      (parts || []).forEach(p => {
+        if(p === null || p === undefined) return;
+        const s = String(p).trim(); if(!s) return;
+        if(/^[0-9]+$/.test(s)){
+          let n = Number(s); if(n >= 0 && n <= 6) n = n + 1; if(n >=1 && n <=7){ const js = (n===7)?0:n; out.push(js); }
+        } else {
+          const key = s.slice(0,3).toLowerCase(); if(map[key]){ const n = map[key]; const js = (n===7)?0:n; out.push(js); }
+        }
+      });
+      return Array.from(new Set(out)).sort((a,b)=>a-b);
+    };
+
+    // essayer de parser
+    try{
+      const parsed = parseCandidateToJs(ds);
+      if(parsed === null) return true; // permissif
+      if(parsed.length === 0) return true;
+      return parsed.includes(wd);
+    }catch(_){ return true; }
   }
 
   // Retourne le stop et l'index correspondant à la gare recherchée (comparison normalisée)

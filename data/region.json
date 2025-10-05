@@ -84,14 +84,14 @@
     },
     {
       "slug": "sncf1985",
-      "name": "Sncf1985",
+      "name": "Sncf 1985",
       "icon": "/img/type/logo-sncf1985.svg",
       "logo": "logo-sncf1985.svg",
       "category": "Logos SNCF"
     },
     {
       "slug": "sncf1992",
-      "name": "Sncf1992",
+      "name": "Sncf 1992",
       "icon": "/img/type/logo-sncf1992.svg",
       "logo": "logo-sncf1992.svg",
       "category": "Logos SNCF"
@@ -371,7 +371,7 @@
     },
     {
       "slug": "breizhgo",
-      "name": "Breizhgo",
+      "name": "BreizhGO",
       "icon": "/img/type/logo-breizhgo.svg",
       "logo": "logo-breizhgo.svg",
       "category": "Régions (après 2016)"

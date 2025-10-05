@@ -10,7 +10,7 @@ function toMask(selected){
   return selected.reduce((m,i)=> m | (1<<Number(i)), 0);
 }
 function fromMask(mask){
-  const out=[]; for(let i=0;i<7;i++){ if(mask & (1<<i)) out.push(i+1); } return out;
+  const out=[]; for(let i=0;i<7;i++){ if(mask & (1<<i)) out.push(i); } return out; // renvoie indices 0..6
 }
 function normTime(s){ if(!s) return null; const m=String(s).trim().match(/^([0-1]\d|2[0-3]):([0-5]\d)$/); return m? `${m[1]}:${m[2]}`: null; }
 function splitDatesStr(s){ if(!s) return []; return String(s).split(',').map(x=> x.trim()).filter(x=> /^\d{4}-\d{2}-\d{2}$/.test(x)); }
@@ -54,8 +54,18 @@ function normalizeToDayNums(selected){
   const out = [];
   (selected||[]).forEach(v=>{
     if(v == null) return;
-    if(typeof v === 'number'){ const n = Number(v); if(Number.isFinite(n)){ if(n>=1 && n<=7) out.push(n); else if(n>=0 && n<=6) out.push(n===0?7:n); } return; }
-    const s = String(v).trim().toLowerCase(); if(/^\d+$/.test(s)){ const n=Number(s); if(n>=1 && n<=7) out.push(n); else if(n>=0 && n<=6) out.push(n===0?7:n); return; }
+    if(typeof v === 'number'){ const n = Number(v); if(Number.isFinite(n)){
+      // Accept both server format (1..7) and client UI format (0..6 where 0 = Lundi)
+      if(n>=1 && n<=7) out.push(n);
+      else if(n>=0 && n<=6) out.push(n + 1); // convert UI 0->1 (Lun), 1->2 (Mar), ..., 6->7 (Dim)
+    } return; }
+    const s = String(v).trim().toLowerCase();
+    if(/^-?\d+$/.test(s)){
+      const n=Number(s);
+      if(n>=1 && n<=7) out.push(n);
+      else if(n>=0 && n<=6) out.push(n + 1);
+      return;
+    }
     const key = s.slice(0,3); if(map[key]) out.push(map[key]);
   });
   return Array.from(new Set(out)).sort((a,b)=>a-b);
@@ -66,10 +76,25 @@ function mapScheduleRow(r){
   // Prefer days_mask_list if present (stocke 1..7)
   let selected = [];
   if(r.days_mask_list){
-    try{ selected = String(r.days_mask_list||'').split(/[;,\s]+/).map(x=>Number(x)).filter(n=> Number.isFinite(n) && n>=1 && n<=7); }
-    catch(e){ selected = fromMask(r.days_mask||0); }
+    try{
+      // parse values and normalize to 1..7
+      selected = String(r.days_mask_list||'').split(/[;,\s]+/)
+        .map(x=>Number(x))
+        .map(n=> {
+          if(!Number.isFinite(n)) return null;
+          if(n >= 1 && n <= 7) return n;       // already 1..7
+          if(n >= 0 && n <= 6) return n + 1;   // convert 0..6 -> 1..7
+          return null;
+        })
+        .filter(n=> n !== null);
+    }
+    catch(e){
+      // fallback to mask -> convert indices 0..6 to 1..7
+      selected = fromMask(r.days_mask||0).map(n => Number(n) + 1);
+    }
   } else {
-    selected = fromMask(r.days_mask||0);
+    // fromMask returns indices 0..6 => convert to 1..7
+    selected = fromMask(r.days_mask||0).map(n => Number(n) + 1);
   }
   const days = { selected, holidays: !!r.flag_holidays, sundays: !!r.flag_sundays, custom: !!r.flag_custom };
   return {
@@ -304,8 +329,8 @@ export async function PUT(request){
 
     const daysNormalized = toMaskAndList(days.selected);
     await conn.execute(
-      `UPDATE schedules SET ligne_id=?, train_number=?, train_type=?, rolling_stock=?, departure_station_id=?, arrival_station_id=?, departure_time=?, arrival_time=?, days_mask=?, days_mask_list=?, flag_holidays=?, flag_sundays=?, flag_custom=? WHERE id=?`,
-      [Number(g.ligneId), g.trainNumber||null, g.trainType||null, body.rollingStock||null, depId, arrId, depT, arrT, daysNormalized.mask, daysNormalized.list, days.holidays?1:0, days.sundays?1:0, days.custom?1:0, Number(scheduleId)]
+      `UPDATE schedules SET ligne_id=?, train_number=?, train_type=?, rolling_stock=?, departure_station_id=?, arrival_station_id=?, departure_time=?, arrival_time=?, days_mask=?, days_mask_list=?, flag_holidays=?, flag_sundays=?, flag_custom=?, is_substitution=? WHERE id=?`,
+      [ligneId, g.trainNumber||null, g.trainType||null, body.rollingStock||null, depId, arrId, depT, arrT, daysNormalized.mask, daysNormalized.list, days.holidays?1:0, days.sundays?1:0, days.custom?1:0, body.isSubstitution ? 1 : 0, id]
     );
 
     await conn.execute('DELETE FROM schedule_stops WHERE schedule_id=?',[id]);

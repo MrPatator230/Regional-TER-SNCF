@@ -160,24 +160,54 @@ export async function GET(req){
         const maskCandidates = item.days_mask_list ?? item.daysMaskList ?? item.days_mask ?? item.daysMask ?? item.daysmask ?? item.daysMaskInt ?? item.running_days_str ?? item.running_days ?? item.days ?? null;
         if(maskCandidates !== null && maskCandidates !== undefined){
           hasDaySpec = true;
-          // array
+          // helper: convertir un tableau/parts en nombres 1..7
+          const partsToNums = (parts) => {
+            const out = [];
+            (parts || []).forEach(p => {
+              if(p === null || p === undefined) return;
+              const s = String(p).trim();
+              if(s === '') return;
+              if(/^[0-9]+$/.test(s)){
+                let n = Number(s);
+                if(n >= 0 && n <= 6) n = n + 1; // accepter 0..6 index
+                if(n >= 1 && n <= 7) out.push(n);
+              }else{
+                const key = s.slice(0,3).toLowerCase();
+                const map = { lun:1, mar:2, mer:3, jeu:4, ven:5, sam:6, dim:7, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:7 };
+                if(map[key]) out.push(map[key]);
+              }
+            });
+            return Array.from(new Set(out)).sort((a,b)=>a-b);
+          };
+
+          const numForApi = dayIndex + 1;
+
           if(Array.isArray(maskCandidates)){
-            const normalized = maskCandidates.map(s=>String(s).trim());
-            if(normalized.includes(String(numForApi))) return true;
+            const nums = partsToNums(maskCandidates);
+            if(nums.includes(numForApi)) return true;
           }else if(typeof maskCandidates === 'string'){
             const sMask = maskCandidates.trim();
             if(/^[01]{7}$/.test(sMask)){
               if(sMask[dayIndex] === '1') return true;
-            }else if(/[;,]/.test(sMask)){
-              const parts = sMask.split(/[;,]/).map(p=>p.trim()).filter(Boolean);
-              if(parts.includes(String(numForApi))) return true;
-            }else if(/^[1-7]$/.test(sMask)){
-              if(sMask === String(numForApi)) return true;
-            }else{
-              const asNum = Number(sMask);
-              if(!Number.isNaN(asNum)){
-                if(((asNum >> dayIndex) & 1) === 1) return true;
+            }else if(/[;,\s]/.test(sMask)){
+              const parts = sMask.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean);
+              const nums = partsToNums(parts);
+              if(nums.includes(numForApi)) return true;
+            }else if(/^[0-9]+$/.test(sMask)){
+              // chiffre unique (1..7) ou entier bitmask
+              if(/^[1-7]$/.test(sMask)){
+                if(sMask === String(numForApi)) return true;
+              }else{
+                const asNum = Number(sMask);
+                if(!Number.isNaN(asNum)){
+                  if(((asNum >> dayIndex) & 1) === 1) return true;
+                }
               }
+            }else{
+              // texte libre -> split et tenter mapping
+              const parts = sMask.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean);
+              const nums = partsToNums(parts);
+              if(nums.includes(numForApi)) return true;
             }
           }else if(typeof maskCandidates === 'number'){
             if(((maskCandidates >> dayIndex) & 1) === 1) return true;
@@ -280,7 +310,7 @@ export async function GET(req){
          const stops = parseStopsJson(r.stops_json || '[]');
          const stopForStation = stops.find(s => {
            if(!s || !s.station_name) return false;
-           return s.station_name === st.name || s.station_name.startsWith(st.name) || st.name.startsWith(s.station_name) || s.station_name.includes(st.name) || st.name.includes(s.station_name);
+           return s.station_name === st.name || s.station_name.startsWith(st.name) || st.name.startsenteurs(s.station_name) || s.station_name.includes(st.name) || st.name.includes(s.station_name);
          }) || null;
          const rawPass = stopForStation?.departure_time || stopForStation?.arrival_time || r.departure_time || null;
          const passTime = normalizeTimeHM(rawPass);

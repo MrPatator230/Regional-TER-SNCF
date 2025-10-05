@@ -20,7 +20,12 @@ function WcsSelect({value,onChange,children,...rest}){ const ref=useRef(null); u
 const WEEK_LABELS=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 function normalizeSequential(list){ if(!list.length) return list; let prev=null; return list.map(s=>{ let a=toMinutes(s.arrival); let d=toMinutes(s.departure); if(prev!=null){ if(a==null||a<prev) a=prev; if(d==null||d<a) d=a; } else { if(a!=null && d!=null && d<a) d=a; if(a==null && d!=null) a=d; if(d==null && a!=null) d=a; }
   if(a!=null) prev=d!=null? d: a; if(d!=null) prev=d; return {...s, arrival:a!=null? minutesToTime(a):'', departure:d!=null? minutesToTime(d):''}; }); }
-function cleanDaysForPayload(days){ return { selected:[...(days.selected||[])].sort(), holidays:!!days.holidays, sundays:!!days.sundays, custom:!!days.custom, customDates: days.custom? (days.customDates||''): '' }; }
+function cleanDaysForPayload(days){
+  // days.selected is expected in this code to be server format 1..7 (1=Lundi ... 7=Dimanche)
+  const sel = Array.isArray(days?.selected) ? Array.from(new Set(days.selected.map(n=> Number(n)).filter(n=> Number.isFinite(n) && n>=1 && n<=7))) : [];
+  sel.sort((a,b)=>a-b);
+  return { selected: sel, holidays: !!days?.holidays, sundays: !!days?.sundays, custom: !!days?.custom, customDates: days?.custom ? (days.customDates||'') : '' };
+}
 function validateForm(state, stations){ const errs=[]; const g=state.general; const stationSet=new Set(stations); if(!g.ligneId) errs.push('Ligne requise'); if(!g.departureTime) errs.push('Heure départ'); if(!g.arrivalTime) errs.push('Heure arrivée'); if(!g.departureStation) errs.push('Gare départ'); if(!g.arrivalStation) errs.push('Gare arrivée'); if(g.departureStation && g.arrivalStation && g.departureStation===g.arrivalStation) errs.push('Départ = arrivée'); if(g.departureTime && g.arrivalTime){ const dep=toMinutes(g.departureTime); const arr=toMinutes(g.arrivalTime); if(dep!=null && arr!=null && arr<dep) errs.push('Arrivée avant départ'); }
   if(g.departureStation && !stationSet.has(g.departureStation)) errs.push('Gare départ inconnue'); if(g.arrivalStation && !stationSet.has(g.arrivalStation)) errs.push('Gare arrivée inconnue');
   const used=[g.departureStation,g.arrivalStation]; state.stops.forEach((s,i)=>{ if(!s.station) return; if(used.includes(s.station)) errs.push(`Arrêt ${i+1}: doublon avec départ/arrivée`); used.push(s.station); if(!stationSet.has(s.station)) errs.push(`Arrêt ${i+1}: gare inconnue`); });
@@ -129,72 +134,145 @@ function RollingStockForm({state,dispatch}){
   </div>;
 }
 
-function StopsForm({state,dispatch,stations}){ const stops=state.stops; const used=new Set(stops.map(s=>s.station).filter(Boolean)); function update(i,patch){ dispatch({type:'SET_STOPS',payload: normalizeSequential(stops.map((s,idx)=> idx===i? {...s,...patch}: s))}); }
+function StopsForm({state,dispatch,stations}){
+  const stops=state.stops;
+  const used=new Set(stops.map(s=>s.station).filter(Boolean));
+  function update(i,patch){ dispatch({type:'SET_STOPS',payload: normalizeSequential(stops.map((s,idx)=> idx===i? {...s,...patch}: s))}); }
   function add(){ dispatch({type:'SET_STOPS',payload:[...stops,{station:'',arrival:'',departure:''}]}); }
   function remove(i){ dispatch({type:'SET_STOPS',payload: stops.filter((_,idx)=> idx!==i)}); }
+  function moveUp(i){ if(i<=0) return; const arr = stops.slice(); [arr[i-1],arr[i]] = [arr[i],arr[i-1]]; dispatch({type:'SET_STOPS',payload: normalizeSequential(arr)}); }
+  function moveDown(i){ if(i>=stops.length-1) return; const arr = stops.slice(); [arr[i+1],arr[i]] = [arr[i],arr[i+1]]; dispatch({type:'SET_STOPS',payload: normalizeSequential(arr)}); }
   function selectableFor(stop){ return stations.filter(st => !used.has(st) || st===stop.station); }
-  return <div className="panel">
-    <h3>Arrêts intermédiaires</h3>
-    <wcs-button mode="stroked" icon="add" onClick={add} disabled={stops.length>=stations.length}>Ajouter</wcs-button>
-    <div className="stops-list" role="list">
-      {stops.map((s,i)=> <div key={i} className="stop-item compact" role="group" aria-label={`Arrêt ${i+1}`}>
-        <div className="stop-col station">
-          <WcsSelect value={s.station} onChange={v=> update(i,{station:v})} aria-label="Gare">
-            <wcs-select-option value="">(Gare)</wcs-select-option>
-            {selectableFor(s).map(st=> <wcs-select-option key={st} value={st}>{st}</wcs-select-option>)}
-          </WcsSelect>
-        </div>
-        <div className="stop-col time">
-          <input type="time" aria-label="Arrivée" value={s.arrival} onChange={e=>update(i,{arrival:e.target.value})} />
-        </div>
-        <span className="arrow">→</span>
-        <div className="stop-col time">
-          <input type="time" aria-label="Départ" value={s.departure} onChange={e=>update(i,{departure:e.target.value})} />
-        </div>
-        <div className="stop-col actions">
-          <wcs-button shape="small" mode="stroked" onClick={()=>remove(i)} aria-label="Supprimer l'arrêt">✕</wcs-button>
-        </div>
-      </div>)}
-    </div>
-    {stops.length===0 && <p className="hint">Aucun arrêt intermédiaire.</p>}
-  </div>; }
 
-function DaysForm({state,dispatch}){ const d=state.days; function toggle(idx){ const set=new Set(d.selected); set.has(idx)? set.delete(idx): set.add(idx); dispatch({type:'SET_DAYS',payload:{selected:[...set].sort()}}); }
+  return <div className="panel stops-panel">
+    <div className="stops-header">
+      <h3>Arrêts intermédiaires</h3>
+      <div className="stops-actions">
+        <wcs-button mode="stroked" icon="add" onClick={add} disabled={stops.length>=stations.length}>Ajouter un arrêt</wcs-button>
+        <span className="stops-count muted">{stops.length} / {stations.length}</span>
+      </div>
+    </div>
+
+    <div className="stops-list" role="list">
+      {stops.map((s,i)=> (
+        <div key={i} className="stop-card" role="group" aria-label={`Arrêt ${i+1}`}>
+          <div className="stop-card-header">
+            <div className="stop-index">Arrêt {i+1}</div>
+            <div className="stop-controls">
+              <wcs-button shape="small" mode="stroked" onClick={()=>moveUp(i)} disabled={i===0} aria-label="Monter l'arrêt"><wcs-mat-icon icon="keyboard_arrow_up" /></wcs-button>
+              <wcs-button shape="small" mode="stroked" onClick={()=>moveDown(i)} disabled={i===stops.length-1} aria-label="Descendre l'arrêt"><wcs-mat-icon icon="keyboard_arrow_down" /></wcs-button>
+              <wcs-button shape="small" mode="stroked" icon="delete" onClick={()=>remove(i)} aria-label="Supprimer l'arrêt">Suppr</wcs-button>
+            </div>
+          </div>
+
+          <div className="stop-card-body">
+            <div className="stop-col station">
+              <label className="field-label">Gare</label>
+              <WcsSelect value={s.station} onChange={v=> update(i,{station:v})} aria-label={`Gare arrêt ${i+1}`}>
+                <wcs-select-option value="">(Gare)</wcs-select-option>
+                {selectableFor(s).map(st=> <wcs-select-option key={st} value={st}>{st}</wcs-select-option>)}
+              </WcsSelect>
+            </div>
+
+            <div className="stop-times">
+              <div className="time-field">
+                <label className="field-label">Arrivée</label>
+                <input type="time" aria-label={`Arrivée arrêt ${i+1}`} value={s.arrival} onChange={e=>update(i,{arrival:e.target.value})} />
+              </div>
+              <div className="time-field">
+                <label className="field-label">Départ</label>
+                <input type="time" aria-label={`Départ arrêt ${i+1}`} value={s.departure} onChange={e=>update(i,{departure:e.target.value})} />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {stops.length===0 && <div className="empty-state"><p className="hint">Aucun arrêt intermédiaire. Utilisez "Ajouter un arrêt" pour en ajouter.</p></div>}
+    </div>
+
+    <style jsx>{`
+      .stops-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+      .stops-actions{display:flex;align-items:center;gap:10px}
+      .stops-count{font-size:.8rem;opacity:.7}
+      .stops-list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+      .stop-card{border:1px solid #e6e9ef;background:#fff;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+      .stop-card-header{display:flex;justify-content:space-between;align-items:center}
+      .stop-index{font-weight:600;font-size:.9rem}
+      .stop-controls{display:flex;gap:6px}
+      .stop-card-body{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+      .stop-col.station{flex:1 1 320px;min-width:160px}
+      .stop-times{display:flex;gap:8px}
+      .time-field{display:flex;flex-direction:column}
+      .time-field input{width:120px;padding:.25rem;border:1px solid #dfe6ee;border-radius:6px}
+      .field-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+      .empty-state{padding:.8rem;border:1px dashed #e4e7ee;border-radius:8px;background:#fbfbfd}
+      @media(max-width:720px){ .stop-card-body{flex-direction:column;align-items:stretch} .stop-times{flex-wrap:wrap} }
+    `}</style>
+  </div>;
+}
+
+function DaysForm({state,dispatch}){
+  // state.days.selected contient des valeurs au format serveur 1..7
+  const d=state.days;
+  const [customInput,setCustomInput]=useState('');
+  const customList = useMemo(()=> (String(d.customDates||'').split(',').map(s=>s.trim()).filter(Boolean)), [d.customDates]);
+
+  function toggle(dayNum){
+    const set=new Set((d.selected||[]).map(n=> Number(n)));
+    if(set.has(dayNum)) set.delete(dayNum); else set.add(dayNum);
+    const arr = Array.from(set).filter(n=> Number.isFinite(n) && n>=1 && n<=7).sort((a,b)=>a-b);
+    dispatch({type:'SET_DAYS',payload:{selected:arr}});
+  }
+
+  function addCustomDate(){
+    const v=customInput.trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) { showToast('Format date invalide (YYYY-MM-DD)','danger'); return; }
+    if(customList.includes(v)){ showToast('Date déjà ajoutée','danger'); return; }
+    const newList=[...customList, v].sort();
+    dispatch({type:'SET_DAYS', payload:{ custom:true, customDates: newList.join(',') }});
+    setCustomInput('');
+  }
+  function removeCustomDate(idx){ const newList = customList.filter((_,i)=> i!==idx); dispatch({type:'SET_DAYS', payload:{ customDates: newList.join(','), custom: newList.length>0 }}); }
+
+  function toggleFlag(flag){ dispatch({type:'SET_DAYS', payload:{ [flag]: !d[flag] }}); }
+
   return <div className="panel">
     <h3>Jours de circulation</h3>
-    <div className="week-days">{WEEK_LABELS.map((l,i)=> <wcs-button key={i} mode={d.selected.includes(i)?'primary':'stroked'} onClick={()=>toggle(i)}>{l}</wcs-button>)}</div>
-    <div className="day-options">
-      <label><input type="checkbox" checked={d.holidays} onChange={e=> dispatch({type:'SET_DAYS',payload:{holidays:e.target.checked}})} /> Jours fériés</label>
-      <label><input type="checkbox" checked={d.sundays} onChange={e=> dispatch({type:'SET_DAYS',payload:{sundays:e.target.checked}})} /> Dimanches</label>
-      <label><input type="checkbox" checked={d.custom} onChange={e=> dispatch({type:'SET_DAYS',payload:{custom:e.target.checked}})} /> Dates spécifiques</label>
-      {d.custom && <WcsInput placeholder="2025-12-24,2025-12-31" value={d.customDates} onChange={v=> dispatch({type:'SET_DAYS',payload:{customDates:v}})} />}
-    </div>
-  </div>; }
+    <div className="week-days">{WEEK_LABELS.map((l,i)=>{
+      const dayNum = i+1; // 1=Lun ... 7=Dim
+      const active = Array.isArray(d.selected) && d.selected.map(Number).includes(dayNum);
+      return <wcs-button key={dayNum} mode={active?'primary':'stroked'} onClick={()=>toggle(dayNum)}>{l}</wcs-button>;
+    })}</div>
 
-function VariantStopsEditor({stops,setStops}){ function toggleRemoved(i){ setStops(prev=> prev.map((s,idx)=> idx===i? {...s, removed:!s.removed}: s)); }
-  return <div className="panel">
-    <h3>Arrêts (modification)</h3>
-    <div className="stops-list variant" role="list">
-      {stops.map((s,i)=> <div key={i} className={'stop-item'+(s.removed?' variant-removed':'')}>
-        <div>
-          <wcs-form-field><wcs-label>Gare</wcs-label>
-            <WcsSelect value={s.station} onChange={v=> setStops(stops.map((st,idx)=> idx===i? {...st, station:v}: st))}>
-              {stops.map((st,j)=> <wcs-select-option key={st.station+'-'+j} value={st.station}>{st.station}</wcs-select-option>)}
-            </WcsSelect>
-          </wcs-form-field>
+    <div className="day-options" style={{display:'flex',flexDirection:'column',gap:8}}>
+      <label style={{display:'flex',gap:8,alignItems:'center'}}><input type="checkbox" checked={!!d.holidays} onChange={()=> toggleFlag('holidays')} /> Jours fériés</label>
+      <label style={{display:'flex',gap:8,alignItems:'center'}}><input type="checkbox" checked={!!d.sundays} onChange={()=> toggleFlag('sundays')} /> Dimanches (drapeau séparé)</label>
+      <label style={{display:'flex',gap:8,alignItems:'center'}}><input type="checkbox" checked={!!d.custom} onChange={()=> toggleFlag('custom')} /> Dates spécifiques</label>
+
+      {d.custom && <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <input type="date" value={customInput} onChange={e=> setCustomInput(e.target.value)} />
+          <wcs-button mode="stroked" onClick={addCustomDate}>Ajouter</wcs-button>
         </div>
-        <div>
-          <label>Arrivée</label>
-          <input type="time" value={s.arrival} onChange={e=> setStops(stops.map((st,idx)=> idx===i? {...st, arrival:e.target.value}: st))} />
-        </div>
-        <div>
-          <label>Départ</label>
-          <input type="time" value={s.departure} onChange={e=> setStops(stops.map((st,idx)=> idx===i? {...st, departure:e.target.value}: st))} />
-        </div>
-        <div className="stop-remove"><wcs-button shape="small" mode={s.removed? 'primary':'stroked'} onClick={()=>toggleRemoved(i)}>{s.removed? 'Réactiver':'Supprimer arrêt'}</wcs-button></div>
-      </div>)}
+        {customList.length===0 && <p className="hint">Aucune date ajoutée.</p>}
+        {customList.length>0 && <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+          {customList.map((dt,i)=> <div key={dt} style={{background:'#eef',padding:'.25rem .5rem',borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
+            <span style={{fontSize:'.9rem'}}>{dt}</span>
+            <wcs-button shape="small" mode="stroked" onClick={()=> removeCustomDate(i)}>✕</wcs-button>
+          </div>)}
+        </div>}
+        <p className="hint">Entrez des dates au format ISO (YYYY-MM-DD). Elles seront transmises au backend dans le champ <code>customDates</code>.</p>
+      </div>}
+
+      <div style={{marginTop:6}}>
+        <label style={{display:'block',fontSize:'.7rem',fontWeight:600}}>Aperçu payload (serveur)</label>
+        <pre style={{background:'#f6f6f8',padding:8,borderRadius:6,overflowX:'auto',fontSize:'.8rem'}}>{JSON.stringify(cleanDaysForPayload(d),null,2)}</pre>
+      </div>
+
     </div>
-  </div>; }
+  </div>;
+}
 
 export default function SchedulesClient(){
   const { data:lines } = useFetchOnce('/api/lignes', j=> j.lignes||[]);
@@ -291,7 +369,29 @@ export default function SchedulesClient(){
 
   const [weekStart,setWeekStart]=useState(()=>{ const d=new Date(); const wd=(d.getDay()+6)%7; d.setDate(d.getDate()-wd); return d.toISOString().slice(0,10); });
   function changeWeek(delta){ const d=new Date(weekStart+'T00:00:00'); d.setDate(d.getDate()+delta*7); setWeekStart(d.toISOString().slice(0,10)); }
-  function expandForWeek(){ const start=new Date(weekStart+'T00:00:00'); const out={}; for(let i=0;i<7;i++){ const cur=new Date(start); cur.setDate(start.getDate()+i); const ds=cur.toISOString().slice(0,10); out[ds]=[]; } schedules.forEach(s=>{ let daysObj=s.days; try{ if(typeof daysObj==='string') daysObj=JSON.parse(daysObj); }catch{} const sel=(daysObj?.selected)||[]; for(let i=0;i<7;i++){ const cur=new Date(start); cur.setDate(start.getDate()+i); const idx=(cur.getDay()+6)%7; if(sel.includes(idx)){ const ds=cur.toISOString().slice(0,10); out[ds].push(s); } } }); return out; }
+  function expandForWeek(){
+    const start=new Date(weekStart+'T00:00:00');
+    const out={};
+    for(let i=0;i<7;i++){ const cur=new Date(start); cur.setDate(start.getDate()+i); const ds=cur.toISOString().slice(0,10); out[ds]=[]; }
+    schedules.forEach(s=>{
+      let daysObj=s.days;
+      try{ if(typeof daysObj==='string') daysObj=JSON.parse(daysObj); }catch{}
+      const raw = daysObj?.selected || [];
+      // normaliser en tableau de nombres (format serveur 1..7)
+      const sel = Array.isArray(raw) ? raw.map(Number).filter(n=> Number.isFinite(n)) : [];
+      for(let i=0;i<7;i++){
+        const cur=new Date(start);
+        cur.setDate(start.getDate()+i);
+        const idx=(cur.getDay()+6)%7; // 0 = Lun .. 6 = Dim
+        // server stores 1..7 -> comparer avec idx+1
+        if(sel.includes(idx+1)){
+          const ds=cur.toISOString().slice(0,10);
+          out[ds].push(s);
+        }
+      }
+    });
+    return out;
+  }
   const weekMap=useMemo(expandForWeek,[schedules,weekStart]);
   const weekDates=useMemo(()=> Array.from({length:7}).map((_,i)=>{ const d=new Date(weekStart+'T00:00:00'); d.setDate(d.getDate()+i); return d.toISOString().slice(0,10); }),[weekStart]);
 
@@ -398,29 +498,37 @@ export default function SchedulesClient(){
 
     {showModal && <>
       <wcs-modal show size="l" onWcsDialogClosed={()=> setShowModal(false)}>
-        <span slot="header">{formState.original? 'Modifier le sillon':'Nouveau sillon'}</span>
+        <span slot="header">
+          <div className="modal-header">
+            <div className="modal-title">{formState.original? 'Modifier le sillon':'Nouveau sillon'}</div>
+            <div className="modal-meta">{formState.general?.trainNumber ? `Train ${formState.general.trainNumber}` : (formState.general?.ligneId ? `Ligne ${formState.general.ligneId}` : '')}</div>
+          </div>
+        </span>
         <div className="modal-content">
-          <wcs-tabs value={modalTab} align="start" onWcsTabsChange={e=> setModalTab(e.detail.value)}>
-            <wcs-tab header="Général" item-key="general">
-              <GeneralForm state={formState} dispatch={dispatch} lines={lines} stations={stations} />
-            </wcs-tab>
-            <wcs-tab header="Arrêts" item-key="stops">
-              <StopsForm state={formState} dispatch={dispatch} stations={stations} />
-            </wcs-tab>
-            <wcs-tab header="Jours" item-key="days">
-              <DaysForm state={formState} dispatch={dispatch} />
-            </wcs-tab>
-            <wcs-tab header="Matériel roulant" item-key="rolling">
-              <RollingStockForm state={formState} dispatch={dispatch} />
-            </wcs-tab>
-            <wcs-tab header="Substitution" item-key="substitution">
-              <SubstitutionForm state={formState} dispatch={dispatch} />
-            </wcs-tab>
-          </wcs-tabs>
-          {formError && <wcs-alert mode="danger" style={{marginTop:'1rem'}}>{formError}</wcs-alert>}
-          {formState.original && Object.keys(diff).length>0 && <div className="diff-box"><strong>Modifications:</strong> {Object.keys(diff).slice(0,6).map(k=> <span key={k} className="diff-item">{k}</span>)}{Object.keys(diff).length>6 && <span>…</span>}</div>}
+          <div className="modal-grid">
+            <div className="modal-main">
+              <wcs-tabs value={modalTab} align="start" onWcsTabsChange={e=> setModalTab(e.detail.value)}>
+                <wcs-tab header="Général" item-key="general">
+                  <GeneralForm state={formState} dispatch={dispatch} lines={lines} stations={stations} />
+                </wcs-tab>
+                <wcs-tab header="Arrêts" item-key="stops">
+                  <StopsForm state={formState} dispatch={dispatch} stations={stations} />
+                </wcs-tab>
+                <wcs-tab header="Jours" item-key="days">
+                  <DaysForm state={formState} dispatch={dispatch} />
+                </wcs-tab>
+                <wcs-tab header="Matériel roulant" item-key="rolling">
+                  <RollingStockForm state={formState} dispatch={dispatch} />
+                </wcs-tab>
+                <wcs-tab header="Substitution" item-key="substitution">
+                  <SubstitutionForm state={formState} dispatch={dispatch} />
+                </wcs-tab>
+              </wcs-tabs>
+            </div>
+          </div>
         </div>
         <div slot="actions" className="modal-actions">
+          {formState.original && <wcs-button mode="danger" onClick={()=>{ if(confirm('Supprimer ce sillon ?')){ deleteSchedule(formState.original.id); setShowModal(false); } }} disabled={saving}>Supprimer</wcs-button>}
           <wcs-button mode="stroked" onClick={()=> setShowModal(false)} disabled={saving}>Annuler</wcs-button>
           <wcs-button mode="primary" onClick={saveForm} disabled={saving || !formState.general.ligneId}>{saving? 'Enregistrement…': (formState.original? 'Mettre à jour':'Enregistrer')}</wcs-button>
         </div>
@@ -504,16 +612,16 @@ export default function SchedulesClient(){
       @media(max-width:620px){.stop-item.compact .stop-col.actions{width:100%;display:flex;justify-content:flex-end;margin-left:0}}
       .stop-remove{display:flex;align-items:flex-end;padding-top:1.1rem}
       .hint{font-size:.7rem;opacity:.65}
-      .modal-content{max-height:60vh;overflow:auto;padding:.5rem 1rem 1rem}
-      .modal-content :global(wcs-tabs){ --tabs-header-padding:0 0 .4rem 0; }
-      .modal-actions{display:flex;justify-content:flex-end;gap:.6rem}
-      .wcs-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(2px);z-index:999}
-      wcs-modal{z-index:1000}
-      .variant-removed{opacity:.55;position:relative}
-      .variant-removed:after{content:'Supprimé';position:absolute;top:4px;right:4px;background:#c60018;color:#fff;font-size:.55rem;padding:.15rem .4rem;border-radius:4px;letter-spacing:.5px}
-      .err{color:#c60018;font-size:.7rem}
-      .diff-box{margin-top:1rem;font-size:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
-      .diff-item{background:#eef;border:1px solid #ccd;padding:.2rem .4rem;border-radius:4px}
+      .modal-content{max-height:70vh;overflow:auto;padding:1rem}
+      .modal-grid{display:grid;grid-template-columns:1fr;gap:1rem}
+      .modal-main{min-width:0}
+      .modal-side{min-width:260px}
+      .side-panel{background:#fbfbfd;border:1px solid #e6e9ef;padding:.75rem;border-radius:8px}
+      .payload-preview{background:#fff;padding:.5rem;border-radius:6px;border:1px solid #eaeef3;max-height:28vh;overflow:auto;font-size:.75rem}
+      .diff-box-side{font-size:.8rem}
+      .diff-list{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem}
+      .diff-item{background:#eef;border:1px solid #ccd;padding:.2rem .4rem;border-radius:4px;font-size:.75rem}
+      @media(max-width:920px){ .modal-grid{grid-template-columns:1fr; } .modal-side{order:2} }
     `}</style>
   </section>; }
 

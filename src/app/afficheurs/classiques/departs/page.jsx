@@ -226,28 +226,59 @@ export default function AfficheurClassiqueDeparts(){
       if(maskCandidates !== null && maskCandidates !== undefined){
         hasDaySpec = true;
         const numForApi = dayIndex + 1; // 1=Monday ... 7=Sunday
-        // 1) si c'est un tableau de jours [1,2,3] ou ['1','2']
+
+        // helper: normaliser un tableau/chaîne de parties en nombres 1..7
+        const partsToNums = (parts) => {
+          const out = [];
+          (parts || []).forEach(p => {
+            if(p === null || p === undefined) return;
+            const s = String(p).trim();
+            if(s === '') return;
+            if(/^[0-9]+$/.test(s)){
+              let n = Number(s);
+              // gérer format 0..6 => convertir en 1..7
+              if(n >= 0 && n <= 6) n = n + 1;
+              if(n >= 1 && n <= 7) out.push(n);
+            }else{
+              const key = s.slice(0,3).toLowerCase();
+              const map = { lun:1, mar:2, mer:3, jeu:4, ven:5, sam:6, dim:7, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:7 };
+              if(map[key]) out.push(map[key]);
+            }
+          });
+          return Array.from(new Set(out)).sort((a,b)=>a-b);
+        };
+
+        // array
         if(Array.isArray(maskCandidates)){
-          const normalized = maskCandidates.map(s=>String(s).trim());
-          if(normalized.includes(String(numForApi))) return true;
+          const nums = partsToNums(maskCandidates);
+          if(nums.includes(numForApi)) return true;
         }else if(typeof maskCandidates === 'string'){
           const sMask = maskCandidates.trim();
           // a) chaîne binaire explicite '1010101' (ordre : lundi..dimanche)
           if(/^[01]{7}$/.test(sMask)){
             if(sMask[dayIndex] === '1') return true;
-          }else if(/[;,]/.test(sMask)){
-            // b) nouveau format demandé : '1;2;3;4;5' ou '1,2,3'
-            const parts = sMask.split(/[;,]/).map(p=>p.trim()).filter(Boolean);
-            if(parts.includes(String(numForApi))) return true;
-          }else if(/^[1-7]$/.test(sMask)){
-            // chaîne numérique d'un seul caractère indiquant un jour (1=Mon ... 7=Sun)
-            if(sMask === String(numForApi)) return true;
-          }else{
-            // c) tenter d'interpréter comme nombre (bitmask) — LSB = bit 0 = lundi
-            const asNum = Number(sMask);
-            if(!Number.isNaN(asNum)){
-              if(((asNum >> dayIndex) & 1) === 1) return true;
+          }else if(/[;,\s]/.test(sMask)){
+            // b) split sur ; , ou espaces
+            const parts = sMask.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean);
+            const nums = partsToNums(parts);
+            if(nums.includes(numForApi)) return true;
+          }else if(/^[0-9]+$/.test(sMask)){
+            // chaîne numérique pure (peut être bitmask ou jour unique)
+            // 1) jour unique '1'..'7'
+            if(/^[1-7]$/.test(sMask)){
+              if(sMask === String(numForApi)) return true;
+            }else{
+              // tenter interpréter comme bitmask entier (LSB = lundi)
+              const asNum = Number(sMask);
+              if(!Number.isNaN(asNum)){
+                if(((asNum >> dayIndex) & 1) === 1) return true;
+              }
             }
+          }else{
+            // texte libre (ex: 'lun, mer') -> tenter par clé
+            const parts = sMask.split(/[;,\s]+/).map(p=>p.trim()).filter(Boolean);
+            const nums = partsToNums(parts);
+            if(nums.includes(numForApi)) return true;
           }
         }else if(typeof maskCandidates === 'number'){
           // entier bitmask

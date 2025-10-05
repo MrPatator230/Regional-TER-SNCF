@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS `sillons` (
   `flag_custom`              TINYINT(1) NOT NULL DEFAULT 0,
   `stops_json`               JSON NOT NULL DEFAULT ('[]'),
   `stops_signature`          VARCHAR(700) NULL,
+  `is_substitution`          TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Indique si ce sillon peut être utilisé comme substitution pendant les travaux',
   `created_at`               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY(`id`),
@@ -390,8 +391,10 @@ BEGIN
   DECLARE arr_station_name VARCHAR(190);
   DECLARE dep_time VARCHAR(5);
   DECLARE arr_time VARCHAR(5);
+  DECLARE max_order INT DEFAULT 0;
 
   SELECT COUNT(*) INTO nb FROM schedule_stops WHERE schedule_id = p_schedule_id;
+  SELECT IFNULL(MAX(stop_order), 0) INTO max_order FROM schedule_stops WHERE schedule_id = p_schedule_id;
 
   -- Récupérer infos du sillon (nom gares et horaires)
   SELECT ds.name, as2.name, DATE_FORMAT(s.departure_time,'%H:%i'), DATE_FORMAT(s.arrival_time,'%H:%i')
@@ -402,6 +405,7 @@ BEGIN
   WHERE s.id = p_schedule_id;
 
   IF nb = 0 THEN
+    -- Aucun arrêt défini : trajet direct origine -> terminus
     SET @agg = JSON_OBJECT(
       'Origine', JSON_OBJECT('station_name', dep_station_name, 'arrival_time', NULL, 'departure_time', dep_time, 'dwell_minutes', NULL),
       'Desservies', JSON_ARRAY(),
@@ -409,7 +413,8 @@ BEGIN
     );
     SET @sig = NULL;
   ELSE
-    -- Desservies (tous les arrêts sauf premier et dernier)
+    -- Desservies : toutes les gares sauf la dernière (terminus)
+    -- Inclut la première gare (après origine) et toutes les gares intermédiaires
     SELECT IFNULL(CONCAT('[', GROUP_CONCAT(
       JSON_OBJECT(
         'station_name', s.name,
@@ -425,14 +430,22 @@ BEGIN
     FROM schedule_stops st
     JOIN stations s ON s.id = st.station_id
     WHERE st.schedule_id = p_schedule_id
-      AND st.stop_order > 0
-      AND st.stop_order < (SELECT MAX(stop_order) FROM schedule_stops WHERE schedule_id = p_schedule_id);
+      AND st.stop_order < max_order;  -- Exclut seulement le dernier arrêt (terminus)
+
+    -- Récupérer les informations du terminus (dernier arrêt)
+    SELECT s.name, DATE_FORMAT(st.arrival_time,'%H:%i')
+      INTO @terminus_name, @terminus_arrival
+    FROM schedule_stops st
+    JOIN stations s ON s.id = st.station_id
+    WHERE st.schedule_id = p_schedule_id
+      AND st.stop_order = max_order;
 
     SET @agg = JSON_OBJECT(
       'Origine', JSON_OBJECT('station_name', dep_station_name, 'arrival_time', NULL, 'departure_time', dep_time, 'dwell_minutes', NULL),
       'Desservies', CAST(@desservies AS JSON),
-      'Terminus', JSON_OBJECT('station_name', arr_station_name, 'arrival_time', arr_time, 'departure_time', NULL, 'dwell_minutes', NULL)
+      'Terminus', JSON_OBJECT('station_name', IFNULL(@terminus_name, arr_station_name), 'arrival_time', IFNULL(@terminus_arrival, arr_time), 'departure_time', NULL, 'dwell_minutes', NULL)
     );
+
     SELECT GROUP_CONCAT(st.station_id ORDER BY st.stop_order SEPARATOR '-') INTO @sig
     FROM schedule_stops st
     WHERE st.schedule_id = p_schedule_id;
