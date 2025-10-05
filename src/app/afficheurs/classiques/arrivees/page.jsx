@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import Marquee from '../../../../components/Marquee';
+import { platformForStation } from '@/app/utils/platform';
 
 export default function AfficheurClassiqueArrivees(){
     const [data,setData]=useState(null);
@@ -681,47 +682,67 @@ export default function AfficheurClassiqueArrivees(){
                             const bigLogo = getLogoFor(typeSlug);
                             const typeName = getTypeName(typeSlug);
 
-                            return (
-                                <div className={`row ${i%2?'alt':''}`} key={d.id||i}>
-                                    <div className="cell logo"><Image src={bigLogo} alt={d.type||'type'} width={135} height={54} /></div>
-                                    <div className="cell status">
-                                        <div className="meta-top">
-                                            {showStatus ? (
-                                                cancelled ? (
-                                                    // supprimé : ligne unique "supprimé"
-                                                    <div className="status-stack cancelled">
-                                                        <span className="status-primary">supprimé</span>
-                                                    </div>
-                                                ) : (delay ? (
-                                                    // retardé : deux lignes "retardé" + "+XX min"
-                                                    <div className="status-stack delayed">
-                                                        <span className="status-primary">retardé</span>
-                                                        <span className="status-secondary">+{delay} min</span>
-                                                    </div>
+                            // Modification de la logique d'affichage des quais pour les arrivées
+                            // Prefer platform provided directly by the API (server attaches admin assignment as `platform` when present).
+                            const apiAssigned = Object.prototype.hasOwnProperty.call(d, 'platform') ? d.platform : undefined;
+                            let platformToShow = null;
+                            if (apiAssigned !== undefined) {
+                              if (String(apiAssigned).trim() !== '') platformToShow = apiAssigned;
+                              else platformToShow = '—'; // Afficher "—" au lieu de masquer la box
+                            } else {
+                              const adminPlatform = platformForStation(d, gare);
+                              if (adminPlatform !== null && adminPlatform !== undefined) {
+                                if (String(adminPlatform).trim() !== '') platformToShow = adminPlatform;
+                                else platformToShow = '—';
+                              } else {
+                                const fallbackPlatform = d.voie || d.platform || d.platform_code || d.track;
+                                platformToShow = fallbackPlatform || '—'; // Toujours afficher une box, même vide avec "—"
+                              }
+                            }
+                                    
+                                    // status text inline rendering used in JSX; no separate variable to avoid unused warning
+                                    return (
+                                      <div className={`row ${i%2?'alt':''}`} key={d.id||i}>
+                                        <div className="cell logo"><Image src={getLogoFor((d.type||'').toString().toLowerCase())} alt={d.type||'type'} width={135} height={54} /></div>
+                                        <div className="cell status">
+                                            <div className="meta-top">
+                                                {showStatus ? (
+                                                    cancelled ? (
+                                                        // supprimé : ligne unique "supprimé"
+                                                        <div className="status-stack cancelled">
+                                                            <span className="status-primary">supprimé</span>
+                                                        </div>
+                                                    ) : (delay ? (
+                                                        // retardé : deux lignes "retardé" + "+XX min"
+                                                        <div className="status-stack delayed">
+                                                            <span className="status-primary">retardé</span>
+                                                            <span className="status-secondary">+{delay} min</span>
+                                                        </div>
+                                                    ) : (
+                                                        // à l'heure
+                                                        <span className={`status-text ontime`}>à l'heure</span>
+                                                    ))
                                                 ) : (
-                                                    // à l'heure
-                                                    <span className={`status-text ontime`}>à l'heure</span>
-                                                ))
-                                            ) : (
-                                                <div className="type-block"><div className="type-name">{typeName}</div><div className="train-number">{trainNumber}</div></div>
+                                                    <div className="type-block"><div className="type-name">{typeName}</div><div className="train-number">{trainNumber}</div></div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {/* masquer l'heure uniquement lorsque le statut 'supprimé' est affiché (showStatus && cancelled) */}
+                                        <div className="cell time"><span>{(!showStatus || !cancelled) ? timeRaw : ''}</span></div>
+                                        <div className="cell destination">
+                                            <div className="dest-main">{originName || '—'}</div>
+                                            {served.length > 0 && i < 2 && (
+                                              <div className="served-list" title={served.join(' • ')}>
+                                                <span className="served-title">Via :</span>
+                                                <div className="served-mask">
+                                                  <Marquee className="served-inline">{served.join(' • ')}</Marquee>
+                                                </div>
+                                              </div>
                                             )}
                                         </div>
+                                        {/* Modifier le rendu pour toujours afficher la box de quai */}
+                                        <div className="cell voie"><div className="voie-box">{platformToShow}</div></div>
                                     </div>
-                                    {/* masquer l'heure uniquement lorsque le statut 'supprimé' est affiché (showStatus && cancelled) */}
-                                    <div className="cell time"><span>{(!showStatus || !cancelled) ? timeRaw : ''}</span></div>
-                                    <div className="cell destination">
-                                        <div className="dest-main">{originName || '—'}</div>
-                                        {served.length > 0 && i < 2 && (
-                                          <div className="served-list" title={served.join(' • ')}>
-                                            <span className="served-title">Via :</span>
-                                            <div className="served-mask">
-                                              <Marquee className="served-inline">{served.join(' • ')}</Marquee>
-                                            </div>
-                                          </div>
-                                        )}
-                                    </div>
-                                    <div className="cell voie"><div className="voie-box">{d.voie || d.platform || ''}</div></div>
-                                </div>
                             );
                         })}
 

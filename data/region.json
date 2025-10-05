@@ -266,35 +266,35 @@
     },
     {
       "slug": "tercentre",
-      "name": "Tercentre",
+      "name": "Ter Centre",
       "icon": "/img/type/logo-tercentre.svg",
       "logo": "logo-tercentre.svg",
       "category": "Régional"
     },
     {
       "slug": "terlanguedocroussillon",
-      "name": "Terlanguedocroussillon",
+      "name": "Ter anguedoc-Roussillon",
       "icon": "/img/type/logo-terlanguedocroussillon.svg",
       "logo": "logo-terlanguedocroussillon.svg",
       "category": "Régional"
     },
     {
       "slug": "termidipyrenees",
-      "name": "Termidipyrenees",
+      "name": "Ter Midi-Pyrenees",
       "icon": "/img/type/logo-termidipyrenees.svg",
       "logo": "logo-termidipyrenees.svg",
       "category": "Régional"
     },
     {
       "slug": "ternordpasdecalais",
-      "name": "Ternordpasdecalais",
+      "name": "Ter Nord Pas de Calais",
       "icon": "/img/type/logo-ternordpasdecalais.svg",
       "logo": "logo-ternordpasdecalais.svg",
       "category": "Régional"
     },
     {
       "slug": "terpoitoucharentes",
-      "name": "Terpoitoucharentes",
+      "name": "Ter Poitou Charentes",
       "icon": "/img/type/logo-terpoitoucharentes.svg",
       "logo": "logo-terpoitoucharentes.svg",
       "category": "Régional"
@@ -329,7 +329,7 @@
     },
     {
       "slug": "track-car",
-      "name": "Track Car",
+      "name": "AutoCar",
       "icon": "/img/type/track-car.svg",
       "logo": "track-car.svg",
       "category": "Régional"

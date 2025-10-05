@@ -58,13 +58,44 @@ function parseStops(row){ // try JSON first
 }
 
 function mapRow(r, idx){ const errors=[]; const g={ ligneId: normStr(r['ligneId']||r['ligne_id']||r['Ligne']||r['ligne']||r['Line']||''), departureStation: normStr(r['departureStation']||r['departure_station']||r['Départ']||r['Depart']||''), arrivalStation: normStr(r['arrivalStation']||r['arrival_station']||r['Arrivée']||r['Arrivee']||''), departureTime: normTime(r['departureTime']||r['departure_time']||r['HeureDépart']||r['HeureDepart']||r['DépartHeure']||r['DepartHeure']||''), arrivalTime: normTime(r['arrivalTime']||r['arrival_time']||r['HeureArrivée']||r['HeureArrivee']||''), trainNumber: normStr(r['trainNumber']||r['train_number']||r['NuméroTrain']||r['NumeroTrain']||''), trainType: normStr(r['trainType']||r['train_type']||r['TypeTrain']||''), rollingStock: normStr(r['rollingStock']||r['Matériel']||r['Materiel']||'') };
-  const stops=parseStops(r);
+  // raw parsed stops (may come from JSON, packed string or Stop1... pattern)
+  const stops = parseStops(r);
+  // Keep a simple validated list for fallback logic
+  const stopsValid = (stops||[]).filter(s=> s && (s.station || s.station_name || s.stationName));
+
   // Fallback depuis les arrêts si champs généraux manquants
-  const stopsValid = (stops||[]).filter(s=> s && s.station);
-  if(!g.departureStation && stopsValid.length){ g.departureStation = stopsValid[0].station; }
-  if(!g.arrivalStation && stopsValid.length){ g.arrivalStation = stopsValid[stopsValid.length-1].station; }
-  if(!g.departureTime && stopsValid.length){ const firstWithDep = stopsValid.find(s=> s.departure); const firstWithAny = stopsValid.find(s=> s.departure || s.arrival); g.departureTime = normTime(firstWithDep?.departure || firstWithAny?.departure || firstWithAny?.arrival || ''); }
-  if(!g.arrivalTime && stopsValid.length){ const rev = [...stopsValid].reverse(); const lastWithArr = rev.find(s=> s.arrival); const lastWithAny = rev.find(s=> s.arrival || s.departure); g.arrivalTime = normTime(lastWithArr?.arrival || lastWithAny?.arrival || lastWithAny?.departure || ''); }
+  if(!g.departureStation && stopsValid.length){ g.departureStation = stopsValid[0].station || stopsValid[0].station_name || stopsValid[0].stationName; }
+  if(!g.arrivalStation && stopsValid.length){ g.arrivalStation = stopsValid[stopsValid.length-1].station || stopsValid[stopsValid.length-1].station_name || stopsValid[stopsValid.length-1].stationName; }
+  if(!g.departureTime && stopsValid.length){ const firstWithDep = stopsValid.find(s=> s.departure || s.departure_time || s.departureTime); const firstWithAny = stopsValid.find(s=> s.departure || s.arrival || s.departure_time || s.arrival_time); g.departureTime = normTime(firstWithDep?.departure || firstWithAny?.departure || firstWithAny?.arrival || ''); }
+  if(!g.arrivalTime && stopsValid.length){ const rev = [...stopsValid].reverse(); const lastWithArr = rev.find(s=> s.arrival || s.arrival_time || s.arrivalTime); const lastWithAny = rev.find(s=> s.arrival || s.departure || s.arrival_time || s.departure_time); g.arrivalTime = normTime(lastWithArr?.arrival || lastWithAny?.arrival || lastWithAny?.departure || ''); }
+
+  // Normalize stops into consistent objects with station/arrival/departure and remove empty names
+  const normalizedStops = (stops||[]).map(s=> ({ station: normStr(s.station||s.station_name||s.stationName), arrival: normTime(s.arrival||s.arrival_time||s.arrivalTime||''), departure: normTime(s.departure||s.departure_time||s.departureTime||'') })).filter(s=> s.station);
+
+  // Helper to compare station names in a tolerant way
+  const sameStation = (a,b)=> String((a||'')).trim().toLowerCase() === String((b||'')).trim().toLowerCase();
+
+  // Ensure origin is present as the first desservie (if we have a departureStation)
+  if(g.departureStation){
+    if(normalizedStops.length === 0 || !sameStation(normalizedStops[0].station, g.departureStation)){
+      // insert at beginning preserving hierarchy
+      normalizedStops.unshift({ station: g.departureStation, arrival: '', departure: normTime(g.departureTime) || '' });
+    } else {
+      // if present, ensure it carries departure time when available
+      if(!normalizedStops[0].departure && g.departureTime) normalizedStops[0].departure = normTime(g.departureTime);
+    }
+  }
+
+  // Ensure terminus is present as the last desservie (if we have an arrivalStation)
+  if(g.arrivalStation){
+    if(normalizedStops.length === 0 || !sameStation(normalizedStops[normalizedStops.length-1].station, g.arrivalStation)){
+      normalizedStops.push({ station: g.arrivalStation, arrival: normTime(g.arrivalTime) || '', departure: '' });
+    } else {
+      const last = normalizedStops[normalizedStops.length-1];
+      if(!last.arrival && g.arrivalTime) last.arrival = normTime(g.arrivalTime);
+    }
+  }
+
   const daysRaw = r['days']||r['daysSelected']||r['Jours']||''; const selected=parseDays(daysRaw);
   const holidays=parseBool(r['holidays']||r['Fériés']||r['Feries']); const sundays=parseBool(r['sundays']||r['Dimanches']);
   const customDates=parseCustomDates(r['customDates']||r['Dates']||'');
@@ -73,7 +104,7 @@ function mapRow(r, idx){ const errors=[]; const g={ ligneId: normStr(r['ligneId'
   if(!g.arrivalStation) errors.push('gare arrivée manquante');
   if(!g.departureTime) errors.push('heure départ manquante/invalide');
   if(!g.arrivalTime) errors.push('heure arrivée manquante/invalide');
-  return { index: idx, general: g, days: { selected, holidays, sundays, custom: !!customDates, customDates }, stops, rollingStock: g.rollingStock, errors };
+  return { index: idx, general: g, days: { selected, holidays, sundays, custom: !!customDates, customDates }, stops: normalizedStops, rollingStock: g.rollingStock, errors };
 }
 
 export async function POST(request){

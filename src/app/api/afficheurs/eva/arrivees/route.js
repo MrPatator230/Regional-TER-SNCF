@@ -69,6 +69,31 @@ function parseStopsJson(raw){
     } catch { return []; }
 }
 
+// Convertit le bitmask (bit0 = Lundi ... bit6 = Dimanche)
+// en tableau JS de jours [0=Dimanche,1=Lundi,...6=Samedi]
+function maskToServiceDays(mask, listStr){
+    // Si une liste explicite est fournie (format '1;2;3' avec 1=Lundi..7=Dimanche), la privilégier
+    if(listStr){
+        try{
+            const parts = String(listStr||'').split(/[;,\s]+/).map(s=>Number(s)).filter(n=> Number.isFinite(n) && n>=1 && n<=7);
+            const js = parts.map(n => n===7 ? 0 : n); // 7->0 (Dimanche), 1->1 (Lundi)
+            return Array.from(new Set(js)).sort((a,b)=>a-b);
+        }catch(e){ /* fallback to mask */ }
+    }
+    if(mask === null || mask === undefined) return null;
+    const m = Number(mask) || 0;
+    const days = [];
+    for(let bit=0; bit<7; bit++){
+        if(m & (1<<bit)){
+            // bit0 => Lundi (JS day 1). Mapping : jsDay = (bit+1)%7
+            const jsDay = (bit + 1) % 7;
+            days.push(jsDay);
+        }
+    }
+    // return array triée unique
+    return Array.from(new Set(days)).sort((a,b)=>a-b);
+}
+
 export async function GET(req){
     try {
         const { searchParams } = new URL(req.url);
@@ -84,7 +109,7 @@ export async function GET(req){
 
         // Nouvelle requête : inclure aussi les sillons où la gare est desservie
         const likeParam = `"${st.name}"`;
-        const rows = await scheduleQuery(`SELECT s.id, s.train_number, s.train_type,
+        const rows = await scheduleQuery(`SELECT s.id, s.train_number, s.train_type, s.days_mask, s.days_mask_list, s.flag_holidays, s.flag_sundays,
         ds.name AS departure_station, as2.name AS arrival_station,
         DATE_FORMAT(s.departure_time, "%H:%i") AS departure_time,
         DATE_FORMAT(s.arrival_time, "%H:%i") AS arrival_time,
@@ -113,6 +138,10 @@ export async function GET(req){
             const voie = (parseInt(r.train_number,10)||0)%2? '1':'2';
             const trainType = r.train_type || 'TER';
             const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg';
+
+            // Calcul du tableau service_days à partir du days_mask (si présent)
+            const serviceDays = maskToServiceDays(r.days_mask, r.days_mask_list);
+
             return {
                 id: r.id,
                 number: r.train_number,
@@ -120,10 +149,15 @@ export async function GET(req){
                 logo: logoPath,
                 arrival_time: r.arrival_time,
                 origin_station: r.departure_station,
-                stops: stops.map(s=>s.station_name),
+                // Fournir les objets d'arrêts complets pour que le front-end puisse lire
+                // station_name, arrival_time, departure_time et autres champs planifiés.
+                stops: stops,
                 horaire_afficheur,
                 voie,
-                status: 'A L\'HEURE'
+                status: 'A L\'HEURE',
+                // Exposer le bitmask brut et un tableau JS-friendly pour filtrage côté client
+                days_mask: r.days_mask === undefined ? null : Number(r.days_mask),
+                service_days: serviceDays
             };
         }).filter(r => r.horaire_afficheur).slice(0,10);
         return NextResponse.json({ gare: gareName, arrivals: list });

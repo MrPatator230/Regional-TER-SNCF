@@ -10,7 +10,7 @@ function toMask(selected){
   return selected.reduce((m,i)=> m | (1<<Number(i)), 0);
 }
 function fromMask(mask){
-  const out=[]; for(let i=0;i<7;i++){ if(mask & (1<<i)) out.push(i); } return out;
+  const out=[]; for(let i=0;i<7;i++){ if(mask & (1<<i)) out.push(i+1); } return out;
 }
 function normTime(s){ if(!s) return null; const m=String(s).trim().match(/^([0-1]\d|2[0-3]):([0-5]\d)$/); return m? `${m[1]}:${m[2]}`: null; }
 function splitDatesStr(s){ if(!s) return []; return String(s).split(',').map(x=> x.trim()).filter(x=> /^\d{4}-\d{2}-\d{2}$/.test(x)); }
@@ -49,8 +49,29 @@ async function ensureLine(conn, ligneId, depName, arrName){
   return Number(ligneId);
 }
 
+function normalizeToDayNums(selected){
+  const map = {lun:1,mar:2,mer:3,jeu:4,ven:5,sam:6,dim:7,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6,sun:7};
+  const out = [];
+  (selected||[]).forEach(v=>{
+    if(v == null) return;
+    if(typeof v === 'number'){ const n = Number(v); if(Number.isFinite(n)){ if(n>=1 && n<=7) out.push(n); else if(n>=0 && n<=6) out.push(n===0?7:n); } return; }
+    const s = String(v).trim().toLowerCase(); if(/^\d+$/.test(s)){ const n=Number(s); if(n>=1 && n<=7) out.push(n); else if(n>=0 && n<=6) out.push(n===0?7:n); return; }
+    const key = s.slice(0,3); if(map[key]) out.push(map[key]);
+  });
+  return Array.from(new Set(out)).sort((a,b)=>a-b);
+}
+function toMaskAndList(selected){ const nums = normalizeToDayNums(selected); let mask=0; nums.forEach(d=>{ if(d>=1 && d<=7) mask |= (1 << (d-1)); }); const list = nums.length ? nums.join(';') : null; return { mask, list }; }
+
 function mapScheduleRow(r){
-  const days = { selected: fromMask(r.days_mask||0), holidays: !!r.flag_holidays, sundays: !!r.flag_sundays, custom: !!r.flag_custom };
+  // Prefer days_mask_list if present (stocke 1..7)
+  let selected = [];
+  if(r.days_mask_list){
+    try{ selected = String(r.days_mask_list||'').split(/[;,\s]+/).map(x=>Number(x)).filter(n=> Number.isFinite(n) && n>=1 && n<=7); }
+    catch(e){ selected = fromMask(r.days_mask||0); }
+  } else {
+    selected = fromMask(r.days_mask||0);
+  }
+  const days = { selected, holidays: !!r.flag_holidays, sundays: !!r.flag_sundays, custom: !!r.flag_custom };
   return {
     id: r.id,
     ligne_id: r.ligne_id,
@@ -208,16 +229,17 @@ export async function POST(request){
     const depId = await ensureStationByName(conn, g.departureStation);
     const arrId = await ensureStationByName(conn, g.arrivalStation);
 
+    const daysNormalized = toMaskAndList(days.selected);
     const [ins] = await conn.execute(
       `INSERT INTO schedules(ligne_id, train_number, train_type, rolling_stock,
                               departure_station_id, arrival_station_id,
                               departure_time, arrival_time,
-                              days_mask, flag_holidays, flag_sundays, flag_custom,
+                              days_mask, days_mask_list, flag_holidays, flag_sundays, flag_custom,
                               is_substitution)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [ligneId, g.trainNumber||null, g.trainType||null, body.rollingStock||null,
        depId, arrId, depT, arrT,
-       toMask(days.selected), days.holidays?1:0, days.sundays?1:0, days.custom?1:0,
+       daysNormalized.mask, daysNormalized.list, days.holidays?1:0, days.sundays?1:0, days.custom?1:0,
        body.isSubstitution ? 1 : 0]
     );
     const scheduleId = ins.insertId;
@@ -280,18 +302,10 @@ export async function PUT(request){
     const depId = await ensureStationByName(conn, g.departureStation);
     const arrId = await ensureStationByName(conn, g.arrivalStation);
 
+    const daysNormalized = toMaskAndList(days.selected);
     await conn.execute(
-      `UPDATE schedules SET ligne_id=?, train_number=?, train_type=?, rolling_stock=?,
-                            departure_station_id=?, arrival_station_id=?,
-                            departure_time=?, arrival_time=?,
-                            days_mask=?, flag_holidays=?, flag_sundays=?, flag_custom=?,
-                            is_substitution=?
-         WHERE id=?`,
-      [ligneId, g.trainNumber||null, g.trainType||null, body.rollingStock||null,
-       depId, arrId, depT, arrT,
-       toMask(days.selected), days.holidays?1:0, days.sundays?1:0, days.custom?1:0,
-       body.isSubstitution ? 1 : 0,
-       id]
+      `UPDATE schedules SET ligne_id=?, train_number=?, train_type=?, rolling_stock=?, departure_station_id=?, arrival_station_id=?, departure_time=?, arrival_time=?, days_mask=?, days_mask_list=?, flag_holidays=?, flag_sundays=?, flag_custom=? WHERE id=?`,
+      [Number(g.ligneId), g.trainNumber||null, g.trainType||null, body.rollingStock||null, depId, arrId, depT, arrT, daysNormalized.mask, daysNormalized.list, days.holidays?1:0, days.sundays?1:0, days.custom?1:0, Number(scheduleId)]
     );
 
     await conn.execute('DELETE FROM schedule_stops WHERE schedule_id=?',[id]);

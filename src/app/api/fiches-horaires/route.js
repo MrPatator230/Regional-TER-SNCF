@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSchedulesDb } from '@/js/db-schedule';
+import { getDb } from '@/js/db';
+import { parseStopsJson } from '@/app/lib/schedules-service';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Forcer l'exécution côté Node (sinon Edge casse Buffer / fonts et le PDF peut s'afficher en texte)
+// Forcer l'exécution côté Node
 export const runtime = 'nodejs';
-
 
 function fromMask(mask){
   const out=[]; for(let i=0;i<7;i++){ if(mask & (1<<i)) out.push(i); } return out;
@@ -42,12 +43,23 @@ function formatDays(d){
 }
 
 async function buildPdf({ ligneId, orientation, tables, travaux, period }){
-  // Nouvelle version multi-table. Pour rétrocompat on accepte si tables non fourni (utiliser ancienne signature)
   if(!tables){
-    // rétrocompat single direction: reconstruire tables
     tables=[{ lineInfo: arguments[0].lineInfo, schedules: arguments[0].schedules }];
   }
+  
+  // Debug: Vérifier les données reçues
+  console.log('=== buildPdf Debug ===');
+  console.log('ligneId:', ligneId);
+  console.log('tables.length:', tables?.length);
+  console.log('tables[0]?.lineInfo?.stations?.length:', tables[0]?.lineInfo?.stations?.length);
+  console.log('tables[0]?.schedules?.length:', tables[0]?.schedules?.length);
+  if (tables[0]?.lineInfo?.stations) {
+    console.log('Stations:', tables[0].lineInfo.stations.map(s => s.name));
+  }
+  
   const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+  
+  // Chargement des polices Avenir
   let fontBytes=null, fontBoldBytes=null, fontMediumBytes=null;
   try {
     const baseDir = path.join(process.cwd(), 'src','fonts');
@@ -55,251 +67,835 @@ async function buildPdf({ ligneId, orientation, tables, travaux, period }){
     fontBoldBytes = await fs.readFile(path.join(baseDir,'avenir-heavy.woff')).catch(()=>null);
     fontMediumBytes = await fs.readFile(path.join(baseDir,'avenir-medium.woff')).catch(()=>null);
   } catch {}
+  
   const pdf = await PDFDocument.create();
   let avenir=null, avenirBold=null, avenirMedium=null;
   try {
-    if(fontBytes){ const fontkit=(await import('fontkit')).default; pdf.registerFontkit(fontkit); avenir = await pdf.embedFont(fontBytes,{subset:true}); }
-    if(fontBoldBytes){ if(!pdf._fontkit){ const fontkit=(await import('fontkit')).default; pdf.registerFontkit(fontkit);} avenirBold = await pdf.embedFont(fontBoldBytes,{subset:true}); }
-    if(fontMediumBytes){ if(!pdf._fontkit){ const fontkit=(await import('fontkit')).default; pdf.registerFontkit(fontkit);} avenirMedium = await pdf.embedFont(fontMediumBytes,{subset:true}); }
+    if(fontBytes){ 
+      const fontkit=(await import('fontkit')).default; 
+      pdf.registerFontkit(fontkit); 
+      avenir = await pdf.embedFont(fontBytes,{subset:true}); 
+    }
+    if(fontBoldBytes){ 
+      if(!pdf._fontkit){ 
+        const fontkit=(await import('fontkit')).default; 
+        pdf.registerFontkit(fontkit);
+      } 
+      avenirBold = await pdf.embedFont(fontBoldBytes,{subset:true}); 
+    }
+    if(fontMediumBytes){ 
+      if(!pdf._fontkit){ 
+        const fontkit=(await import('fontkit')).default; 
+        pdf.registerFontkit(fontkit);
+      } 
+      avenirMedium = await pdf.embedFont(fontMediumBytes,{subset:true}); 
+    }
   } catch {}
+  
   const fontStd = await pdf.embedFont(StandardFonts.Helvetica);
   const fontStdBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  if(!avenir) avenir=fontStd; if(!avenirBold) avenirBold=fontStdBold; if(!avenirMedium) avenirMedium=avenir;
+  if(!avenir) avenir=fontStd; 
+  if(!avenirBold) avenirBold=fontStdBold; 
+  if(!avenirMedium) avenirMedium=avenir;
 
-  const brandColor = rgb(11/255,39/255,64/255);
-  const grayBg = rgb(245/255,247/255,250/255);
-  const lineColor = rgb(200/255,205/255,210/255);
-  const accent = rgb(0/255,108/255,190/255);
+  // === DESIGN SNCF VOYAGEURS ===
+  
+  // Couleurs officielles SNCF
+  const sncfBlue = rgb(11/255, 39/255, 64/255);        // Bleu marine principal
+  const sncfRed = rgb(181/255, 31/255, 43/255);        // Rouge SNCF
+  const sncfLightBlue = rgb(0/255, 108/255, 190/255);  // Bleu clair
+   const sncfGray = rgb(245/255, 247/255, 250/255);     // Gris clair fond
+   const sncfDarkGray = rgb(82/255, 93/255, 102/255);   // Gris foncé texte
+   const white = rgb(1, 1, 1);
 
-  const landscape = orientation==='landscape';
-  const pageWidth = landscape? 842: 595;
-  const pageHeight = landscape? 595: 842;
-  const margin = 34;
-
-  const pages=[];
-  function newPage(){ const p = pdf.addPage([pageWidth,pageHeight]); pages.push(p); return p; }
-
-  // Préparation stations et colonnes
-  const stations = (tables[0]?.lineInfo?.stations && tables[0].lineInfo.stations.length)? tables[0].lineInfo.stations : (()=>{ // fallback: déduire des sillons
-    const set=new Set();
-    tables.forEach(t=> t.schedules.forEach(sc=>{ try { JSON.parse(sc.stops_json||'[]').forEach(s=> set.add(s.station_name||s.station)); } catch{}; set.add(sc.departure_station); set.add(sc.arrival_station); }));
-    return Array.from(set).map((n,i)=> ({ id:i+1, name:n })).sort((a,b)=> a.name.localeCompare(b.name));
-  })();
-  const schedCols = tables[0]?.schedules;
-
-  const cardPaddingX = 18;
-  const cardPaddingTop = 56; // sous bandeaux
-  const cardPaddingBottom = 110; // place légende
-
-  const headerGlobalHeight = 110; // bandeaux + espace titre
-
-  // Mesure largeur colonnes dynamique (min 48)
-  const firstColWidth = 140;
-  const usableWidth = pageWidth - margin*2 - cardPaddingX*2 - firstColWidth;
-  const colWidth = Math.max(48, Math.min(90, usableWidth / Math.max(1,schedCols.length)));
-
-  // Fonction rendu pages
-  let page = newPage();
-
-  function drawTop(p){
-    // Bandeau principal
-    const h1=48;
-    p.drawRectangle({ x:0,y:pageHeight-h1,width:pageWidth,height:h1,color:brandColor });
-    p.drawText('HORAIRES TER', { x: margin, y: pageHeight - 34, size:22, font: avenirBold, color: rgb(1,1,1) });
-    const periodText = period?.start && period?.end ? `Applicables du ${period.start} au ${period.end}` : (period?.start? `Valable à partir du ${period.start}`: (period?.label||''));
-    if(periodText){ p.drawText(periodText, { x: margin, y: pageHeight - 52, size:10, font: avenirMedium, color: rgb(1,1,1) }); }
-    // Bandeau secondaire (diagramme)
-    const h2=46; const y2 = pageHeight - h1 - h2;
-    p.drawRectangle({ x:0,y:y2,width:pageWidth,height:h2,color:grayBg });
-    const relation = tables[0]?.lineInfo ? `${tables[0].lineInfo.departName} > ${tables[0].lineInfo.arriveeName}` : '';
-    if(relation){ p.drawText(relation, { x: margin, y: y2 + h2 - 28, size:18, font: avenirBold, color: brandColor }); }
-    if(stations.length){
-      const diagX = margin; const diagY = y2 + 18; const usableW = pageWidth - margin*2; const step = usableW / Math.max(1, stations.length-1);
-      stations.forEach((s,idx)=>{
-        const cx = diagX + idx*step;
-        p.drawCircle({ x: cx, y: diagY, size:4, color: brandColor });
-        if(idx<stations.length-1) p.drawLine({ start:{x:cx+4,y:diagY}, end:{x:cx+step-4,y:diagY}, thickness:1.2, color: brandColor });
-        const label = s.name.length>18? s.name.slice(0,17)+'…': s.name;
-        p.drawText(label, { x: cx-24, y: diagY-14, size:6, font: avenir, color: brandColor });
-      });
-    }
+  // Dimensions
+  const landscape = orientation === 'landscape';
+  const pageWidth = landscape ? 842 : 595;
+  const pageHeight = landscape ? 595 : 842;
+  const margin = 40;
+  
+  const pages = [];
+  function newPage() { 
+    const p = pdf.addPage([pageWidth, pageHeight]); 
+    pages.push(p); 
+    return p; 
   }
 
-  function drawPageFrame(p){
-    // Ombre (simple) + carte blanche
-    const cardTop = pageHeight - headerGlobalHeight - 10;
-    const cardHeight = pageHeight - cardTop - margin + 10;
-    // Ombre
-    p.drawRectangle({ x: margin+2, y: margin-2, width: pageWidth - margin*2, height: cardTop - margin + 12, color: rgb(0,0,0), opacity:0.05 });
-    // Fond
-    p.drawRectangle({ x: margin, y: margin, width: pageWidth - margin*2, height: cardTop - margin + 10, color: rgb(1,1,1) });
-    // Titre central au-dessus du tableau
-    const relation = tables[0]?.lineInfo ? `${tables[0].lineInfo.departName.toUpperCase()} > ${tables[0].lineInfo.arriveeName.toUpperCase()}`: '';
-    if(relation){ p.drawText(relation, { x: margin + cardPaddingX, y: cardTop - 24, size:16, font: avenirBold, color: brandColor }); }
-    return { cardTop };
+  // Extraction des données - utilise les stations ordonnées depuis lineInfo
+  let stations = [];
+  
+  // Priorité 1 : Utiliser les stations depuis lineInfo (déjà ordonnées correctement dans GET)
+  if (tables[0]?.lineInfo?.stations?.length) {
+    stations = tables[0].lineInfo.stations;
   }
-
-  drawTop(page);
-  const { cardTop } = drawPageFrame(page);
-
-  const rowHeight = 16; // hauteur station
-  const doubleHeaderH = 30; // 2 lignes
-
-  let yCursor = cardTop - 50; // sous titre
-
-  function printTableHeader(p){
-    // Zone d’en-tête colonnes (double)
-    const startX = margin + cardPaddingX;
-    const tableWidth = firstColWidth + schedCols.length*colWidth;
-    // Fond header
-    p.drawRectangle({ x:startX, y: yCursor - doubleHeaderH, width: tableWidth, height: doubleHeaderH, color: grayBg });
-    // Première colonne label
-    p.drawText('Gare', { x: startX+6, y: yCursor - 13, size:9, font: avenirBold, color: brandColor });
-    // Lignes séparation horizontales header
-    p.drawLine({ start:{x:startX,y:yCursor - rowHeight}, end:{x:startX+tableWidth,y:yCursor - rowHeight}, thickness:0.5, color: lineColor });
-    // Colonnes
-    schedCols.forEach((sc,i)=>{
-      const colX = startX + firstColWidth + i*colWidth;
-      // Ligne verticale
-      p.drawLine({ start:{x:colX, y:yCursor - doubleHeaderH}, end:{x:colX, y:yCursor}, thickness:0.5, color: lineColor });
-      // Train number (ligne 1)
-      const tn=(sc.train_number||'').toString();
-      p.drawText(tn, { x: colX+4, y: yCursor - 12, size:8, font: avenirBold, color: brandColor });
-      // Days (ligne 2)
-      const daysStr = formatDays(sc.days)||'';
-      p.drawText(daysStr.slice(0,24), { x: colX+4, y: yCursor - 25, size:6, font: avenir, color: rgb(60/255,60/255,60/255) });
-    });
-    // Bordure droite
-    p.drawLine({ start:{x:startX+tableWidth, y:yCursor - doubleHeaderH}, end:{x:startX+tableWidth, y:yCursor}, thickness:0.5, color: lineColor });
-    yCursor -= doubleHeaderH;
-  }
-
-  function newContentPage(){ page = newPage(); drawTop(page); const f = drawPageFrame(page); yCursor = f.cardTop - 50; printTableHeader(page); }
-
-  printTableHeader(page);
-
-  function ensureSpace(rowsNeeded){
-    if(yCursor - rowsNeeded*rowHeight < margin + cardPaddingBottom){ newContentPage(); }
-  }
-
-  const startX = margin + cardPaddingX;
-  const tableWidth = firstColWidth + schedCols.length*colWidth;
-
-  stations.forEach((st, idx)=>{
-    ensureSpace(1);
-    const rowY = yCursor - rowHeight;
-    // Fond alterné
-    if(idx %2 ===1){ page.drawRectangle({ x:startX, y: rowY, width: tableWidth, height: rowHeight, color: rgb(250/255,252/255,253/255) }); }
-    // Séparateur haut
-    page.drawLine({ start:{x:startX, y: rowY+rowHeight}, end:{x:startX+tableWidth, y: rowY+rowHeight}, thickness:0.35, color: lineColor });
-    // Nom gare
-    const isEndpoint = st.id===tables[0]?.lineInfo?.stations?.[0]?.id || st.id===tables[0]?.lineInfo?.stations?.[tables[0].lineInfo.stations.length-1]?.id;
-    page.drawText(st.name.slice(0,34), { x:startX+6, y: rowY + 4, size: isEndpoint?9:8, font: isEndpoint? avenirBold: avenir, color: isEndpoint? brandColor: rgb(20/255,20/255,20/255) });
-    // Colonnes horaires
-    schedCols.forEach((sc,i)=>{
-      const colX = startX + firstColWidth + i*colWidth;
-      let stops=[]; try { stops = JSON.parse(sc.stops_json||'[]'); } catch {}
-      const stop = stops.find(s=> (s.station_name||s.station) === st.name);
-      const arr = stop?.arrival_time||stop?.arrival||''; const dep = stop?.departure_time||stop?.departure||'';
-      let text='';
-      if(arr && dep && arr!==dep) text = arr + '/' + dep; else text = dep || arr || '';
-      if(sc.departure_station===st.name) text = sc.departure_time || text;
-      if(sc.arrival_station===st.name) text = sc.arrival_time || text;
-      if(text){
-        const isMain = isEndpoint;
-        page.drawText(text, { x: colX+4, y: rowY + 4, size: isMain?8:7, font: isMain? avenirBold: avenir, color: accent });
+  // Fallback : Extraction depuis l'horaire le plus long si lineInfo n'est pas disponible
+  else if (tables[0]?.schedules?.length) {
+    let longestStops = [];
+    let longestSchedule = null;
+    for (const sc of tables[0].schedules) {
+      let stops = [];
+      try { stops = JSON.parse(sc.stops_json || '[]'); } catch (e) { stops = []; }
+      if (stops.length > longestStops.length) {
+        longestStops = stops;
+        longestSchedule = sc;
       }
-    });
-    yCursor -= rowHeight;
-  });
-  // Dernière bordure bas
-  page.drawLine({ start:{x:startX, y:yCursor}, end:{x:startX+tableWidth, y:yCursor}, thickness:0.6, color: lineColor });
+    }
+    if (longestSchedule && longestStops.length) {
+      const seqNamesRaw = [
+        longestSchedule.departure_station, 
+        ...longestStops.map(s => (s.station_name || s.station)).filter(Boolean), 
+        longestSchedule.arrival_station
+      ];
+      const seen = new Set();
+      const seqNames = [];
+      seqNamesRaw.forEach(n => { 
+        if (n && !seen.has(n)) { 
+          seen.add(n); 
+          seqNames.push(n); 
+        } 
+      });
+      stations = seqNames.map((name, i) => ({ id: i + 1, name }));
+    }
+  }
+  
+  const schedCols = tables[0]?.schedules || [];
+  
+  // Calcul dynamique des colonnes
+  const headerHeight = 80;
+  const infoBarHeight = 36;
+  const footerHeight = 110;
+  const tableTopMargin = 20;
+  // Compute first column width dynamically based on station names and font metrics
+  // fallback to 160 if fonts or station names are not available
+  let firstColWidth = 160;
+  try {
+    const stationNames = (stations||[]).map(s => (s && s.name) ? String(s.name) : '').filter(Boolean);
+    if (stationNames.length && avenir && typeof avenir.widthOfTextAtSize === 'function') {
+      // measure at the size we use for terminal names (10) to ensure long names fit
+      const measured = stationNames.map(n => Math.ceil(avenir.widthOfTextAtSize(String(n), 10)));
+      const maxMeasured = Math.max(...measured, 120);
+      const padding = 48; // reserve space for icon/margins
+      // don't let the station column occupy the whole page: cap at fraction of usable page width
+      const maxAllowed = Math.floor((pageWidth - margin * 2) * 0.55);
+      firstColWidth = Math.min(maxAllowed, Math.max(120, Math.ceil(maxMeasured + padding)));
+    }
+  } catch (e) {
+    firstColWidth = 160;
+  }
+  const minColWidth = 50;
+  const maxColWidth = 85;
 
-  // Légende & travaux sur dernière page
-  function drawLegendBlock(p){
-    let baseY = margin + 70; // réserve pour logos / pagination
-    const legendX = startX;
-    // Travaux
-    if(travaux && travaux.length){
-      const blockH = 46 + Math.min(3,travaux.length)*10;
-      p.drawRectangle({ x: legendX, y: baseY + 80, width: tableWidth, height: blockH, color: rgb(255/255,247/255,210/255) });
-      p.drawText('Travaux / perturbations', { x: legendX+10, y: baseY + 80 + blockH - 18, size:10, font: avenirBold, color: rgb(170/255,110/255,0) });
-      travaux.slice(0,3).forEach((t,i)=>{
-        // Remplacement flèche unicode par ASCII '->'
-        p.drawText('- ' + (t.titre||'Travaux') + (t.date_debut? ` (${t.date_debut.split('T')[0]} -> ${(t.date_fin||'').split('T')[0]})` : ''), { x: legendX+12, y: baseY + 80 + blockH - 32 - i*10, size:7, font: avenir, color: rgb(60/255,60/255,60/255) });
+  let availableWidth = pageWidth - margin * 2 - firstColWidth;
+  // If availableWidth is too small to render schedule columns, reduce firstColWidth to free space
+  const minTotalSched = Math.max(minColWidth * Math.max(1, schedCols.length), 120);
+  if (availableWidth < minTotalSched) {
+    const reduce = minTotalSched - availableWidth;
+    firstColWidth = Math.max(100, firstColWidth - reduce);
+    availableWidth = pageWidth - margin * 2 - firstColWidth;
+  }
+
+  const colWidth = Math.max(minColWidth, Math.min(maxColWidth, availableWidth / Math.max(1, schedCols.length)));
+  const rowHeight = 20;
+  
+  // === FONCTIONS DE DESSIN ===
+  
+  function drawHeader(p) {
+    // Fond bleu marine
+    p.drawRectangle({
+      x: 0,
+      y: pageHeight - headerHeight,
+      width: pageWidth,
+      height: headerHeight,
+      color: sncfBlue
+    });
+
+    // Logo SNCF stylisé
+    p.drawRectangle({
+      x: margin,
+      y: pageHeight - headerHeight + 40,
+      width: 70,
+      height: 28,
+      color: white
+    });
+    p.drawText('SNCF', {
+      x: margin + 8,
+      y: pageHeight - headerHeight + 48,
+      size: 18,
+      font: avenirBold,
+      color: sncfBlue
+    });
+
+    // Badge TER rouge
+    p.drawRectangle({
+      x: margin + 75,
+      y: pageHeight - headerHeight + 44,
+      width: 40,
+      height: 20,
+      color: sncfRed
+    });
+    p.drawText('TER', {
+      x: margin + 82,
+      y: pageHeight - headerHeight + 49,
+      size: 12,
+      font: avenirBold,
+      color: white
+    });
+
+    // Ligne de relation avec chevrons doubles
+    const relation = tables[0]?.lineInfo 
+      ? `${tables[0].lineInfo.departName.toUpperCase()} <> ${tables[0].lineInfo.arriveeName.toUpperCase()}` 
+      : `LIGNE ${ligneId}`;
+    p.drawText(relation, {
+      x: margin + 130,
+      y: pageHeight - headerHeight + 50,
+      size: 22,
+      font: avenirBold,
+      color: white
+    });
+
+    // Numéro de ligne (petit badge)
+    if (ligneId) {
+      const ligneText = `Ligne ${ligneId}`;
+      const ligneWidth = avenirMedium.widthOfTextAtSize(ligneText, 9);
+      const badgeX = pageWidth - margin - ligneWidth - 20;
+
+      p.drawRectangle({
+        x: badgeX - 5,
+        y: pageHeight - headerHeight + 46,
+        width: ligneWidth + 10,
+        height: 16,
+        color: rgb(1, 1, 1),
+        opacity: 0.2
+      });
+
+      p.drawText(ligneText, {
+        x: badgeX,
+        y: pageHeight - headerHeight + 50,
+        size: 9,
+        font: avenirMedium,
+        color: white
       });
     }
-    // Légende symboles (dessin vectoriel pour éviter glyphes non WinAnsi)
-    p.drawText('Légende', { x: legendX, y: baseY + 60, size:10, font: avenirBold, color: brandColor });
-    const rowBase = baseY + 50;
-    const lineSpacing = 10;
-    const iconX = legendX + 4;
-    // 1. Correspondance: double flèche horizontale dessinée
-    const y1 = rowBase; p.drawLine({ start:{x:iconX, y:y1}, end:{x:iconX+12, y:y1}, thickness:1, color: rgb(70/255,70/255,70/255) });
-    // pointes
-    p.drawLine({ start:{x:iconX, y:y1}, end:{x:iconX+3, y:y1+2}, thickness:1, color: rgb(70/255,70/255,70/255) });
-    p.drawLine({ start:{x:iconX, y:y1}, end:{x:iconX+3, y:y1-2}, thickness:1, color: rgb(70/255,70/255,70/255) });
-    p.drawLine({ start:{x:iconX+12, y:y1}, end:{x:iconX+9, y:y1+2}, thickness:1, color: rgb(70/255,70/255,70/255) });
-    p.drawLine({ start:{x:iconX+12, y:y1}, end:{x:iconX+9, y:y1-2}, thickness:1, color: rgb(70/255,70/255,70/255) });
-    p.drawText('Correspondance', { x: iconX+18, y: y1-3, size:7, font: avenir, color: rgb(70/255,70/255,70/255) });
-    // 2. Exception: petit carré avec * dessiné manuellement
-    const y2 = rowBase - lineSpacing; p.drawRectangle({ x:iconX, y:y2-3, width:8, height:8, borderColor: rgb(70/255,70/255,70/255), color: rgb(1,1,1) });
-    p.drawLine({ start:{x:iconX+1, y:y2+1}, end:{x:iconX+7, y:y2-1}, thickness:0.6, color: rgb(70/255,70/255,70/255) });
-    p.drawLine({ start:{x:iconX+1, y:y2-1}, end:{x:iconX+7, y:y2+1}, thickness:0.6, color: rgb(70/255,70/255,70/255) });
-    p.drawText('Exception / ne circule pas certains jours', { x: iconX+18, y: y2-3, size:7, font: avenir, color: rgb(70/255,70/255,70/255) });
-    // 3. Travaux: triangle + !
-    const y3 = rowBase - lineSpacing*2; // triangle base
-    const triX = iconX+4; const triY = y3-3;
-    p.drawLine({ start:{x:triX-4,y:triY}, end:{x:triX+4,y:triY}, thickness:0.8, color: rgb(170/255,110/255,0) });
-    p.drawLine({ start:{x:triX-4,y:triY}, end:{x:triX,y:triY+7}, thickness:0.8, color: rgb(170/255,110/255,0) });
-    p.drawLine({ start:{x:triX+4,y:triY}, end:{x:triX,y:triY+7}, thickness:0.8, color: rgb(170/255,110/255,0) });
-    p.drawLine({ start:{x:triX,y:triY+1}, end:{x:triX,y:triY+5}, thickness:0.8, color: rgb(170/255,110/255,0) });
-    p.drawLine({ start:{x:triX,y:triY}, end:{x:triX,y:triY}, thickness:1, color: rgb(170/255,110/255,0) });
-    p.drawText('Travaux', { x: iconX+18, y: y3-3, size:7, font: avenir, color: rgb(70/255,70/255,70/255) });
-    // Disclaimer
-    p.drawText('Informations indicatives susceptibles de modifications. Verifiez avant le voyage.', { x: legendX, y: baseY + 12, size:6.5, font: avenirMedium, color: rgb(90/255,90/255,90/255) });
+
+    // Période de validité
+    const periodText = period?.start && period?.end 
+      ? `Horaires valables du ${period.start} au ${period.end}` 
+      : (period?.start ? `Valable à partir du ${period.start}` : '');
+    if (periodText) {
+      p.drawText(periodText, {
+        x: margin + 130,
+        y: pageHeight - headerHeight + 30,
+        size: 10,
+        font: avenirMedium,
+        color: white,
+        opacity: 0.9
+      });
+    }
+
+    // Date de génération (petite, en haut à droite)
+    p.drawText(new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }), {
+      x: pageWidth - margin - 100,
+      y: pageHeight - headerHeight + 50,
+      size: 9,
+      font: avenirMedium,
+      color: white,
+      opacity: 0.9
+    });
   }
-  drawLegendBlock(page);
+  
+  function drawInfoBar(p) {
+    const y = pageHeight - headerHeight - infoBarHeight;
+    
+    // Fond gris clair
+    p.drawRectangle({
+      x: 0,
+      y: y,
+      width: pageWidth,
+      height: infoBarHeight,
+      color: sncfGray
+    });
+    
+    // Barre verticale bleue accent
+    p.drawRectangle({
+      x: 0,
+      y: y,
+      width: 4,
+      height: infoBarHeight,
+      color: sncfLightBlue
+    });
+    
+    // Icône info (cercle avec i)
+    p.drawCircle({
+      x: margin + 8,
+      y: y + infoBarHeight / 2,
+      size: 8,
+      color: sncfLightBlue
+    });
+    p.drawText('i', {
+      x: margin + 5,
+      y: y + infoBarHeight / 2 - 4,
+      size: 12,
+      font: avenirBold,
+      color: white
+    });
+    
+    // Texte informatif
+    p.drawText('INFORMATION VOYAGEURS', {
+      x: margin + 24,
+      y: y + 22,
+      size: 10,
+      font: avenirBold,
+      color: sncfBlue
+    });
+    p.drawText('Consultez les horaires en temps réel sur sncf-connect.com ou l\'application mobile', {
+      x: margin + 24,
+      y: y + 8,
+      size: 8,
+      font: avenir,
+      color: sncfDarkGray
+    });
+  }
+  
+  function drawTable(p, stations, schedCols) {
+    console.log('=== drawTable Debug ===');
+    console.log('stations.length:', stations?.length);
+    console.log('schedCols.length:', schedCols?.length);
+    
+    const tableStartY = pageHeight - headerHeight - infoBarHeight - tableTopMargin;
+    const startX = margin;
+    let yCursor = tableStartY;
+    
+    // Protection: afficher un message si pas de données
+    if (!stations || stations.length === 0) {
+      p.drawText('Aucune gare à afficher', {
+        x: startX + 12,
+        y: tableStartY - 50,
+        size: 10,
+        font: avenir,
+        color: sncfDarkGray
+      });
+    }
+    
+    if (!schedCols || schedCols.length === 0) {
+      p.drawText('Aucun horaire disponible pour cette ligne', {
+        x: startX + 12,
+        y: tableStartY - 70,
+        size: 10,
+        font: avenir,
+        color: sncfDarkGray
+      });
+    }
+    
+    const tableWidth = firstColWidth + schedCols.length * colWidth;
+    
+    // En-tête du tableau (fond bleu)
+    const headerRowHeight = rowHeight * 2.5;
+    p.drawRectangle({
+      x: startX,
+      y: yCursor - headerRowHeight,
+      width: tableWidth,
+      height: headerRowHeight,
+      color: sncfBlue
+    });
+    
+    // Colonne "GARES"
+    p.drawText('GARES', {
+      x: startX + 12,
+      y: yCursor - headerRowHeight + rowHeight + 8,
+      size: 11,
+      font: avenirBold,
+      color: white
+    });
+    
+    // Colonnes trains
+    schedCols.forEach((sc, i) => {
+      const colX = startX + firstColWidth + i * colWidth;
+      
+      // Séparateur vertical léger
+      if (i > 0) {
+        p.drawLine({
+          start: { x: colX, y: yCursor - headerRowHeight },
+          end: { x: colX, y: yCursor },
+          thickness: 0.5,
+          color: white,
+          opacity: 0.3
+        });
+      }
+      
+      // Numéro de train
+      const trainNum = sc.train_number || '';
+      p.drawText(trainNum, {
+        x: colX + 8,
+        y: yCursor - headerRowHeight + rowHeight + 8,
+        size: 11,
+        font: avenirBold,
+        color: white
+      });
+      
+      // Jours de circulation
+      const daysStr = formatDays(sc.days) || '';
+      const daysShort = daysStr.length > 16 ? daysStr.slice(0, 14) + '...' : daysStr;
+      p.drawText(daysShort, {
+        x: colX + 4,
+        y: yCursor - headerRowHeight + 8,
+        size: 7,
+        font: avenir,
+        color: white,
+        opacity: 0.85
+      });
+    });
+    
+    yCursor -= headerRowHeight;
+    
+    // Par schedule, indiquer si l'arrivée du terminus a déjà été affichée sous la gare précédente
+    const terminusArrivalRendered = new Array(schedCols.length).fill(false);
 
-  // Logos (SNCF + TER) si disponibles
-  try {
-    const sncfPath = path.join(process.cwd(),'public','img','brand','sncf-logo.png');
-    const sncfBytes = await fs.readFile(sncfPath).catch(()=>null);
-    if(sncfBytes){ const sncfImg = await pdf.embedPng(sncfBytes); const pngW= sncfImg.width; const pngH= sncfImg.height; const scale=40/pngH; page.drawImage(sncfImg,{ x: pageWidth - margin - 50, y: margin + 10, width: pngW*scale, height: pngH*scale }); }
-  } catch {}
+    // Helper to normalize station names for tolerant comparison (remove accents, lowercase, collapse punctuation)
+    const normalizeName = (s) => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').replace(/[\-–—_.]/g,' ').trim().toLowerCase().replace(/\s+ville$/,'').replace(/[^a-z0-9 ]/g,'');
 
-  // Pagination + date génération
-  const genTxt = `Généré le ${(new Date()).toLocaleDateString('fr-FR')} - Ligne ${ligneId}`;
-  pages.forEach((p, idx)=>{
-    const footerY = margin - 16;
-    p.drawText(genTxt, { x: margin, y: footerY+4, size:6.5, font: avenir, color: rgb(120/255,120/255,120/255) });
-    const pageLabel = `Page ${idx+1}/${pages.length}`;
-    const textWidth = avenir.widthOfTextAtSize(pageLabel, 7);
-    p.drawText(pageLabel, { x: (pageWidth - textWidth)/2, y: footerY+4, size:7, font: avenirMedium, color: rgb(120/255,120/255,120/255) });
+    // Precompute arrival index for each schedule so we can detect the terminus row for that schedule
+    const scheduleArrivalIndex = schedCols.map(sc => {
+      const target = normalizeName(sc.arrival_station || sc.arriveeName || '');
+      if (!target) return -1;
+      for (let si = 0; si < (stations||[]).length; si++) {
+        const sname = normalizeName((stations[si] && stations[si].name) ? stations[si].name : '');
+        if (!sname) continue;
+        if (sname === target || sname.includes(target) || target.includes(sname)) return si;
+      }
+      return -1;
+    });
+
+    // Lignes de gares
+    stations.forEach((st, idx) => {
+      // Fond alterné
+      const isEven = idx % 2 === 0;
+      const bgColor = isEven ? white : sncfGray;
+      
+      p.drawRectangle({
+        x: startX,
+        y: yCursor - rowHeight,
+        width: tableWidth,
+        height: rowHeight,
+        color: bgColor
+      });
+      
+      // Déterminer si la gare doit être traitée comme terminal.
+      // On considère comme terminal : le 1er, le dernier, ou toute gare dont le nom correspond
+      // explicitement au départ/à l'arrivée déclarés dans le lineInfo (gare importante).
+      const lineInfoLocal = tables[0]?.lineInfo || null;
+      const departLabel = lineInfoLocal?.departName?.toString().trim();
+      const arriveeLabel = lineInfoLocal?.arriveeName?.toString().trim();
+      const isTerminal = idx === 0 || idx === stations.length - 1 || (st.name && (st.name === departLabel || st.name === arriveeLabel));
+      
+      if (isTerminal) {
+        // Style terminal identique : grande puce rouge
+        p.drawCircle({
+          x: startX + 8,
+          y: yCursor - rowHeight / 2,
+          size: 4,
+          color: sncfRed
+        });
+      } else {
+        // Petite puce bleue pour les arrêts intermédiaires
+        p.drawCircle({
+          x: startX + 8,
+          y: yCursor - rowHeight / 2,
+          size: 2,
+          color: sncfLightBlue
+        });
+      }
+      
+      // Pour le premier/dernier et les gares importantes, afficher explicitement les noms de départ/arrivée
+      let stationDisplayName = st.name;
+      if (idx === 0 && departLabel) stationDisplayName = departLabel;
+      if (idx === stations.length - 1 && arriveeLabel) stationDisplayName = arriveeLabel;
+      
+      // Afficher le nom complet pour les terminaux (pas de troncature) ; sinon limiter à 28 chars
+      const stationName = isTerminal ? stationDisplayName : (stationDisplayName || '').slice(0, 28);
+      p.drawText(stationName, {
+        x: startX + 18,
+        y: yCursor - rowHeight / 2 - 3,
+        size: isTerminal ? 10 : 9,
+        font: isTerminal ? avenirBold : avenir,
+        color: isTerminal ? sncfBlue : sncfDarkGray
+      });
+      
+      // Horaires pour chaque train
+      schedCols.forEach((sc, i) => {
+        const colX = startX + firstColWidth + i * colWidth;
+        
+        // Séparateur vertical
+        if (i > 0) {
+          p.drawLine({
+            start: { x: colX, y: yCursor - rowHeight },
+            end: { x: colX, y: yCursor },
+            thickness: 0.5,
+            color: sncfDarkGray,
+            opacity: 0.15
+          });
+        }
+        
+        // Récupération de l'horaire (utiliser parseStopsJson pour normalisation)
+        let rawStops = [];
+        try { rawStops = JSON.parse(sc.stops_json || '[]'); } catch (e) { rawStops = []; }
+        // parseStopsJson renvoie des objets { station, arrival, departure } avec HH:MM
+        let normStops = [];
+        try { normStops = parseStopsJson(sc.stops_json || '[]'); } catch (e) { normStops = []; }
+
+        // Normalisation des identifiants / noms de la gare courante
+        const stId = st.id;
+        const stName = (st.name || '').toString().trim();
+
+        // Chercher d'abord parmi les stops normalisés (par nom)
+        let foundStop = normStops.find(s => s && s.station && s.station.toString().trim().toLowerCase() === stName.toLowerCase());
+
+        // Si non trouvé, tenter par id dans rawStops
+        if (!foundStop && rawStops.length) {
+          const idFields = ['station_id','stationId','id','gare_id','stop_id'];
+          const rawMatch = rawStops.find(s => {
+            if (!s) return false;
+            for (const f of idFields) {
+              if (s[f] != null && String(s[f]).trim() !== '') {
+                try { if (Number(s[f]) === Number(stId)) return true; } catch {}
+              }
+            }
+            return false;
+          });
+          if (rawMatch) {
+            // extraire heures si présentes (plusieurs variantes)
+            const arrRaw = rawMatch.arrival_time || rawMatch.arrival || rawMatch.arrivalTime || rawMatch.heure_arrivee || '';
+            const depRaw = rawMatch.departure_time || rawMatch.departure || rawMatch.departureTime || rawMatch.heure_depart || '';
+            const norm = t => { if(!t) return ''; try { return String(t).replace(/^(\d{2}:\d{2}):\d{2}$/, '$1').slice(0,5); } catch { return String(t).slice(0,5); } };
+            foundStop = { station: stName, arrival: norm(arrRaw), departure: norm(depRaw) };
+          }
+        }
+
+        // Si toujours pas trouvé, tenter appariement approximatif sur le nom dans rawStops
+        if (!foundStop && rawStops.length) {
+          const approx = rawStops.find(s => {
+            const cand = (s?.station_name || s?.station || s?.name || s?.stop_name || '').toString().trim().toLowerCase();
+            return cand && stName && cand === stName.toLowerCase();
+          });
+          if (approx) {
+            const arrRaw = approx.arrival_time || approx.arrival || approx.arrivalTime || approx.heure_arrivee || '';
+            const depRaw = approx.departure_time || approx.departure || approx.departureTime || approx.heure_depart || '';
+            const norm = t => { if(!t) return ''; try { return String(t).replace(/^(\d{2}:\d{2}):\d{2}$/, '$1').slice(0,5); } catch { return String(t).slice(0,5); } };
+            foundStop = { station: stName, arrival: norm(arrRaw), departure: norm(depRaw) };
+          }
+        }
+
+        // Normaliser utilitaire pour comparaison tolérante
+        const normCmp = s => String(s||'').toString().trim().toLowerCase();
+        // Définir normTime local
+        const normTime = t => { if(!t) return ''; try { return String(t).replace(/^(\d{2}:\d{2}):\d{2}$/, '$1').slice(0,5); } catch { return String(t).slice(0,5); } };
+
+        // Nom de la gare pour cette ligne
+        // stName already declared above for this station row
+
+        // Nom du terminus déclaré globalement (lineInfo)
+        const globalArrivee = (arriveeLabel || '').toString().trim();
+
+        // Nom de la gare correspondant à l'arrêt trouvé dans les stops (s'il existe)
+        // foundStop est déjà calculé ci-dessus
+
+        // Calculer si pour CE sillon, le terminus correspond à la gare courante
+        // prefer precomputed arrival index matching (more tolerant)
+        const isScheduleTerminus = (scheduleArrivalIndex[i] !== undefined && scheduleArrivalIndex[i] === idx);
+
+        // Déterminer texte principal pour la ligne courante (préférence arrivée si c'est le terminus de CE sillon)
+        let text = '';
+        if (isScheduleTerminus) {
+          // Priorité: heure d'arrivée pour ce sillon
+          const arrRaw = foundStop?.arrival || sc.arrival_time || '';
+          text = normTime(arrRaw);
+          if (!text) text = normTime(sc.arrival_time || '');
+        } else {
+          // Si ce n'est pas le terminus de ce sillon, mais la gare correspond au global terminus, afficher aussi arrivée
+          const isGlobalLast = normCmp(globalArrivee) && normCmp(globalArrivee) === normCmp(stName);
+          if (isGlobalLast) {
+            const arrRaw = foundStop?.arrival || sc.arrival_time || '';
+            text = normTime(arrRaw) || normTime(sc.arrival_time || '');
+          } else {
+            // Comportement historique : afficher l'heure de départ
+            let dep = foundStop?.departure || '';
+            dep = normTime(dep);
+            if (dep) {
+              text = dep;
+            } else {
+              if (sc.departure_station && normCmp(sc.departure_station) === normCmp(stName)) {
+                text = normTime(sc.departure_time || '');
+              }
+            }
+          }
+        }
+
+        // Affichage standard : afficher le texte principal (départ ou arrivée si déterminé) s'il existe
+        if (text) {
+          const textColor = isTerminal ? sncfBlue : sncfLightBlue;
+          p.drawText(text, {
+            x: colX + 8,
+            y: yCursor - rowHeight / 2 - 3,
+            size: isTerminal ? 10 : 9,
+            font: isTerminal ? avenirBold : avenir,
+            color: textColor
+          });
+        }
+      });
+      
+      // Ligne de séparation horizontale
+      p.drawLine({
+        start: { x: startX, y: yCursor - rowHeight },
+        end: { x: startX + tableWidth, y: yCursor - rowHeight },
+        thickness: 0.5,
+        color: sncfDarkGray,
+        opacity: 0.2
+      });
+      
+      yCursor -= rowHeight;
+    });
+    
+    // Bordure finale épaisse
+    p.drawLine({
+      start: { x: startX, y: yCursor },
+      end: { x: startX + tableWidth, y: yCursor },
+      thickness: 2,
+      color: sncfBlue
+    });
+    
+    return yCursor;
+  }
+  
+  function drawServicesIcons(p, schedCols) {
+    const y = pageHeight - headerHeight - infoBarHeight - tableTopMargin - rowHeight * 2.5 - 28;
+    const startX = margin + firstColWidth;
+    
+    schedCols.forEach((sc, i) => {
+      const colX = startX + i * colWidth;
+      const centerX = colX + colWidth / 2;
+      
+      // Icône vélo (transport de vélos autorisé)
+      const bikeX = centerX - 8;
+      p.drawCircle({ x: bikeX, y: y, size: 3, color: sncfLightBlue });
+      p.drawCircle({ x: bikeX + 10, y: y, size: 3, color: sncfLightBlue });
+      p.drawLine({
+        start: { x: bikeX + 3, y: y },
+        end: { x: bikeX + 10, y: y },
+        thickness: 1,
+        color: sncfLightBlue
+      });
+      p.drawLine({
+        start: { x: bikeX + 3, y: y },
+        end: { x: bikeX + 6, y: y + 5 },
+        thickness: 1,
+        color: sncfLightBlue
+      });
+      p.drawLine({
+        start: { x: bikeX + 10, y: y },
+        end: { x: bikeX + 6, y: y + 5 },
+        thickness: 1,
+        color: sncfLightBlue
+      });
+    });
+  }
+  
+  function drawFooter(p) {
+    const y = margin;
+    const blockHeight = footerHeight - 20;
+    
+    // Bloc gauche - Informations pratiques
+    const leftBlockWidth = (pageWidth - margin * 2) * 0.58;
+    
+    p.drawRectangle({
+      x: margin,
+      y: y,
+      width: leftBlockWidth,
+      height: blockHeight,
+      color: sncfGray
+    });
+    
+    // Barre d'accent bleue
+    p.drawRectangle({
+      x: margin,
+      y: y + blockHeight - 3,
+      width: leftBlockWidth,
+      height: 3,
+      color: sncfLightBlue
+    });
+    
+    p.drawText('INFORMATIONS PRATIQUES', {
+      x: margin + 16,
+      y: y + blockHeight - 18,
+      size: 11,
+      font: avenirBold,
+      color: sncfBlue
+    });
+    
+    const infoLineHeight = 11;
+    let yInfo = y + blockHeight - 34;
+    
+    const infos = [
+      '• Réservation conseillée pour certains trains',
+      '• Transport de vélos selon disponibilité',
+      '• Services accessibles PMR sur demande',
+      '• Wifi gratuit à bord (selon matériel)',
+      '• Consultez les horaires en temps réel sur sncf-connect.com'
+    ];
+    
+    infos.forEach(info => {
+      p.drawText(info, {
+        x: margin + 16,
+        y: yInfo,
+        size: 8,
+        font: avenir,
+        color: sncfDarkGray
+      });
+      yInfo -= infoLineHeight;
+    });
+    
+    // Bloc droit - Contact
+    const rightBlockWidth = (pageWidth - margin * 2) * 0.38;
+    const rightX = pageWidth - margin - rightBlockWidth;
+    
+    p.drawRectangle({
+      x: rightX,
+      y: y,
+      width: rightBlockWidth,
+      height: blockHeight,
+      color: sncfBlue
+    });
+    
+    p.drawText('CONTACTS & ASSISTANCE', {
+      x: rightX + 16,
+      y: y + blockHeight - 18,
+      size: 11,
+      font: avenirBold,
+      color: white
+    });
+    
+    let yContact = y + blockHeight - 36;
+    
+    p.drawText('SNCF Voyageurs', {
+      x: rightX + 16,
+      y: yContact,
+      size: 9,
+      font: avenirBold,
+      color: white
+    });
+    yContact -= 14;
+    
+    p.drawText('3635 - Informations et réservations', {
+      x: rightX + 16,
+      y: yContact,
+      size: 8,
+      font: avenir,
+      color: white,
+      opacity: 0.9
+    });
+    yContact -= 11;
+    
+    p.drawText('7j/7 de 7h à 22h', {
+      x: rightX + 16,
+      y: yContact,
+      size: 7,
+      font: avenir,
+      color: white,
+      opacity: 0.75
+    });
+    yContact -= 16;
+    
+    p.drawText('Application SNCF Connect', {
+      x: rightX + 16,
+      y: yContact,
+      size: 8,
+      font: avenirBold,
+      color: white
+    });
+    yContact -= 11;
+    
+    p.drawText('www.sncf-connect.com', {
+      x: rightX + 16,
+      y: yContact,
+      size: 8,
+      font: avenir,
+      color: white,
+      opacity: 0.9
+    });
+    
+    // Logo TER en bas à droite
+    p.drawRectangle({
+      x: pageWidth - margin - 55,
+      y: y + 8,
+      width: 48,
+      height: 18,
+      color: sncfRed
+    });
+    p.drawText('TER', {
+      x: pageWidth - margin - 44,
+      y: y + 12,
+      size: 13,
+      font: avenirBold,
+      color: white
+    });
+  }
+  
+  // === GÉNÉRATION DU PDF ===
+  
+  const page = newPage();
+  
+  drawHeader(page);
+  drawInfoBar(page);
+  drawServicesIcons(page, schedCols);
+  drawTable(page, stations, schedCols);
+  drawFooter(page);
+  
+  // Numérotation des pages
+  pages.forEach((p, idx) => {
+    const pageNum = `${idx + 1}`;
+    const pageText = `Page ${pageNum}`;
+    p.drawText(pageText, {
+      x: pageWidth / 2 - 20,
+      y: 14,
+      size: 8,
+      font: avenir,
+      color: sncfDarkGray,
+      opacity: 0.7
+    });
   });
-
+  
   return await pdf.save();
 }
-export { buildPdf }; // export pour tests éventuels
 
-export async function GET(request){
+export { buildPdf };
+
+export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const ligneId = Number(searchParams.get('ligneId')||0);
-  let orientation = (searchParams.get('orientation')||'portrait').toLowerCase();
-  if(!['portrait','landscape'].includes(orientation)) orientation = 'portrait';
-  const format = (searchParams.get('format')||'json').toLowerCase();
-  const periodStart = searchParams.get('startDate')||''; // AAAA-MM-JJ
-  const periodEnd = searchParams.get('endDate')||'';
-
-  const direction = (searchParams.get('direction')||'forward').toLowerCase();
-  const stationsParam = (searchParams.get('stations')||'').trim();
-  let stationFilterIds = stationsParam? stationsParam.split(',').map(s=> Number(s.trim())).filter(n=> Number.isInteger(n)&& n>0) : [];
-
-  if(!ligneId){
-    return NextResponse.json({ error:'ligneId manquant' }, { status:400 });
+  const ligneId = Number(searchParams.get('ligneId') || 0);
+  let orientation = (searchParams.get('orientation') || 'landscape').toLowerCase();
+  // Acceptation de synonymes FR pour l'orientation
+  const orientationMap = {
+    'paysage': 'landscape',
+    'portrait': 'portrait',
+    'landscape': 'landscape',
+    'portrait': 'portrait'
+  };
+  orientation = orientationMap[orientation] || 'landscape';
+  if (!['portrait', 'landscape'].includes(orientation)) orientation = 'landscape';
+  const format = (searchParams.get('format') || 'json').toLowerCase();
+  const periodStart = searchParams.get('startDate') || '';
+  const periodEnd = searchParams.get('endDate') || '';
+  
+  const direction = (searchParams.get('direction') || 'forward').toLowerCase();
+  const stationsParam = (searchParams.get('stations') || '').trim();
+  let stationFilterIds = stationsParam 
+    ? stationsParam.split(',').map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0) 
+    : [];
+  
+  if (!ligneId) {
+    return NextResponse.json({ error: 'ligneId manquant' }, { status: 400 });
   }
-
+  
   const conn = await getSchedulesDb().getConnection();
+  
   try {
     const [rows] = await conn.execute(
       `SELECT s.id, s.ligne_id, s.train_number, s.train_type, s.rolling_stock,
@@ -316,116 +912,386 @@ export async function GET(request){
         ORDER BY s.departure_time ASC, s.id ASC`,
       [ligneId]
     );
-
+    
     const schedules = rows.map(mapScheduleRow);
 
-    if(format==='pdf'){
-      // Infos ligne (ordre stations)
-      let lineInfo=null; try {
-        const [lineRows] = await conn.execute(`SELECT l.id, l.depart_station_id, l.arrivee_station_id, l.desservies, ds.name AS departName, as2.name AS arriveeName
-          FROM lignes l
-          JOIN stations ds ON ds.id=l.depart_station_id
-          JOIN stations as2 ON as2.id=l.arrivee_station_id
-          WHERE l.id=? LIMIT 1`, [ligneId]);
-        if(lineRows.length){
-          const lr = lineRows[0];
-          let dess=[]; try { dess = JSON.parse(lr.desservies||'[]'); } catch { dess=[]; }
-          dess = Array.isArray(dess)? dess: [];
-          if(dess.length){
-            const placeholders = dess.map(()=>'?').join(',');
-            const [dessStations] = await conn.execute(`SELECT id,name FROM stations WHERE id IN (${placeholders})`, dess);
-            const nameById={}; dessStations.forEach(r=>{ nameById[r.id]=r.name; });
-            const stationSeq = [ lr.depart_station_id, ...dess, lr.arrivee_station_id ];
-            lineInfo={ id: lr.id, departName: lr.departName, arriveeName: lr.arriveeName, stations: stationSeq.map(id=> ({ id, name: id===lr.depart_station_id? lr.departName: (id===lr.arrivee_station_id? lr.arriveeName: nameById[id]||('Gare '+id)) })) };
-          } else {
-            lineInfo={ id: lr.id, departName: lr.departName, arriveeName: lr.arriveeName, stations: [ {id:lr.depart_station_id,name:lr.departName}, {id:lr.arrivee_station_id,name:lr.arriveeName} ] };
-          }
+    // Récupérer lineInfo de manière centralisée (depuis la table lignes ou fallback via schedules)
+    let lineInfo = await fetchLineInfo(ligneId, schedules);
+    // Si fetchLineInfo n'a pas retourné de lineInfo, construire un fallback depuis les schedules
+    if (!lineInfo && Array.isArray(schedules) && schedules.length > 0) {
+      const allSet = new Set();
+      const order = [];
+      let longestStops = [];
+      let longest = null;
+      schedules.forEach(sc => {
+        let stops = [];
+        try { stops = JSON.parse(sc.stops_json || '[]'); } catch (e) { stops = []; }
+        if (stops.length > longestStops.length) {
+          longestStops = stops;
+          longest = sc;
         }
-      } catch {}
-
-      // Ré-ordonnancement des gares basé sur la séquence réelle des arrêts (plus long trajet)
-      if(lineInfo){
-        const allSchedules = schedules; // déjà filtré par ligne
-        let longestStops = [];
-        let longestSchedule = null;
-        for(const sc of allSchedules){
-          let stops=[]; try { stops = JSON.parse(sc.stops_json||'[]'); } catch {}
-          if(stops.length > longestStops.length){ longestStops = stops; longestSchedule = sc; }
-        }
-        if(longestSchedule && longestStops.length){
-          const seqNamesRaw = [longestSchedule.departure_station, ...longestStops.map(s=> (s.station_name||s.station)).filter(Boolean), longestSchedule.arrival_station];
-          const seen=new Set(); const seqNames=[]; // dédoublonnage en conservant l'ordre
-          seqNamesRaw.forEach(n=>{ if(n && !seen.has(n)){ seen.add(n); seqNames.push(n); } });
-          const indexByName={}; seqNames.forEach((n,i)=>{ indexByName[n]=i; });
-          const depName=lineInfo.departName; const arrName=lineInfo.arriveeName;
-          lineInfo.stations = [...lineInfo.stations].sort((a,b)=>{
-            if(a.name===depName && b.name!==depName) return -1;
-            if(b.name===depName && a.name!==depName) return 1;
-            if(a.name===arrName && b.name!==arrName) return 1;
-            if(b.name===arrName && a.name!==arrName) return -1;
-            const ia = indexByName[a.name]; const ib = indexByName[b.name];
-            if(ia==null && ib==null) return a.name.localeCompare(b.name);
-            if(ia==null) return 1;
-            if(ib==null) return -1;
-            return ia-ib;
-          });
-        }
+      });
+      if (longest) {
+        const departStation = longest.departure_station || '';
+        const arrivalStation = longest.arrival_station || '';
+        if (departStation && !allSet.has(departStation)) { allSet.add(departStation); order.push(departStation); }
+        longestStops.forEach(stop => {
+          const stName = stop.station_name || stop.station;
+          if (stName && !allSet.has(stName)) { allSet.add(stName); order.push(stName); }
+        });
+        if (arrivalStation && !allSet.has(arrivalStation)) { allSet.add(arrivalStation); order.push(arrivalStation); }
+        lineInfo = {
+          id: ligneId,
+          departName: departStation || '',
+          arriveeName: arrivalStation || '',
+          stations: order.map((name, idx) => ({ id: idx + 1, name }))
+        };
       }
-      // Perturbations travaux
-      let travaux=[]; try {
-        const now = new Date();
-        const [pertRows] = await conn.execute(`SELECT id, type, titre, description, DATE_FORMAT(date_debut,'%Y-%m-%dT%H:%i:%sZ') AS date_debut, DATE_FORMAT(date_fin,'%Y-%m-%dT%H:%i:%sZ') AS date_fin
-          FROM perturbations WHERE ligne_id=? AND type='travaux' ORDER BY date_debut DESC LIMIT 5`, [ligneId]);
-        travaux = pertRows;
-      } catch{}
-      const period={ start: periodStart||'', end: periodEnd||'', label: (periodStart||periodEnd)?'':'Période non spécifiée' };
-
-      // filtrage stations
-      let filteredForwardStations = lineInfo?.stations || [];
-      if(stationFilterIds.length){
-        const idSet = new Set(stationFilterIds);
-        // toujours garder endpoints
-        if(lineInfo?.stations?.length){ idSet.add(lineInfo.stations[0].id); idSet.add(lineInfo.stations[lineInfo.stations.length-1].id); }
-        const tmp = filteredForwardStations.filter(st=> idSet.has(st.id));
-        if(tmp.length>=2) filteredForwardStations = tmp; // sinon garde tout
-      }
-      const forwardLineInfo = lineInfo? { ...lineInfo, stations: filteredForwardStations }: null;
-      // Partition sillons
-      const forwardSchedules = schedules.filter(sc=> sc.departure_station === lineInfo?.departName);
-      const reverseSchedules = schedules.filter(sc=> sc.departure_station === lineInfo?.arriveeName);
-      // Construire lineInfo reverse (ordre inversé)
-      let reverseLineInfo=null; if(lineInfo){
-        let revStations = [...lineInfo.stations].reverse();
-        if(stationFilterIds.length){
-          const idSet = new Set(stationFilterIds); idSet.add(lineInfo.stations[0].id); idSet.add(lineInfo.stations[lineInfo.stations.length-1].id);
-            const tmp = revStations.filter(st=> idSet.has(st.id)); if(tmp.length>=2) revStations=tmp;
-        }
-        reverseLineInfo = { ...lineInfo, stations: revStations, departName: lineInfo.arriveeName, arriveeName: lineInfo.departName };
-      }
-      const tables=[]; if(direction==='forward' || direction==='both'){ tables.push({ lineInfo: forwardLineInfo, schedules: forwardSchedules, label:'Aller' }); }
-      if((direction==='reverse' || direction==='both') && reverseSchedules.length){ tables.push({ lineInfo: reverseLineInfo, schedules: reverseSchedules, label:'Retour' }); }
-      const pdfBytes = await buildPdf({ ligneId, orientation, tables, travaux, period });
-      return new Response(pdfBytes, { status:200, headers:{ 'Content-Type':'application/pdf', 'Content-Disposition': `inline; filename=fiche-horaires-ligne-${ligneId}.pdf`, 'Cache-Control':'no-store' } });
     }
 
+    // Construire la période
+    const period = {
+      start: periodStart || '',
+      end: periodEnd || '',
+      label: (periodStart || periodEnd) ? '' : 'Période non spécifiée'
+    };
+
+    // Si on souhaite un PDF, récupérer travaux, préparer tables et générer le PDF
+    if (format === 'pdf') {
+      // Perturbations travaux
+      let travaux = [];
+      try {
+        // Vérifier l'existence de la table perturbations avant de la requêter
+        const [tbl] = await conn.execute(
+          `SELECT COUNT(*) AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'perturbations'`
+        );
+        if (tbl && tbl[0] && Number(tbl[0].c) > 0) {
+          const [pertRows] = await conn.execute(
+            `SELECT id, type, titre, description, 
+                    DATE_FORMAT(date_debut,'%Y-%m-%dT%H:%i:%sZ') AS date_debut,
+                    DATE_FORMAT(date_fin,'%Y-%m-%dT%H:%i:%sZ') AS date_fin
+             FROM perturbations 
+             WHERE ligne_id=? AND type='travaux' 
+             ORDER BY date_debut DESC LIMIT 5`,
+            [ligneId]
+          );
+          travaux = pertRows;
+        } else {
+          travaux = [];
+        }
+      } catch (e) {
+        console.error('Erreur récupération perturbations (check failed):', e);
+        travaux = [];
+      }
+
+      // Filtrage stations (si param stations fourni)
+      let filteredForwardStations = lineInfo?.stations || [];
+      if (stationFilterIds.length) {
+        const idSet = new Set(stationFilterIds);
+        if (lineInfo?.stations?.length) {
+          idSet.add(lineInfo.stations[0].id);
+          idSet.add(lineInfo.stations[lineInfo.stations.length - 1].id);
+        }
+        const tmp = filteredForwardStations.filter(st => idSet.has(st.id));
+        if (tmp.length >= 2) filteredForwardStations = tmp;
+        else filteredForwardStations = lineInfo?.stations || filteredForwardStations;
+      }
+
+      const forwardLineInfo = lineInfo ? { ...lineInfo, stations: filteredForwardStations } : null;
+
+      // Utiliser tous les schedules (pas de sens inverse calculé ici)
+      const forwardSchedules = schedules;
+      // Génération simple des schedules en sens inverse :
+      // on inverse l'ordre des arrêts et on échange départ/arrivée + les heures correspondantes.
+      const reverseSchedules = forwardSchedules.map(sc => {
+        // Clone léger
+        const rev = { ...sc };
+        // Swap stations
+        rev.departure_station = sc.arrival_station;
+        rev.arrival_station = sc.departure_station;
+        // Swap times
+        rev.departure_time = sc.arrival_time || sc.departure_time;
+        rev.arrival_time = sc.departure_time || sc.arrival_time;
+
+        // Inverser les stops
+        try {
+          const originalStops = JSON.parse(sc.stops_json || '[]');
+          const reversedStops = originalStops.slice().reverse().map(stop => {
+            // swap arrival/departure keys and times if present
+            const newStop = { ...stop };
+            // swap field names that may exist (station_name/station preserved)
+            const arr = stop.arrival || stop.arrival_time || stop.arrivalTime || null;
+            const dep = stop.departure || stop.departure_time || stop.departureTime || null;
+            if (arr !== null || dep !== null) {
+              if (arr !== undefined) newStop.departure = arr;
+              if (dep !== undefined) newStop.arrival = dep;
+              // Also handle time-specific fields
+              if (stop.arrival_time !== undefined) newStop.departure_time = stop.arrival_time;
+              if (stop.departure_time !== undefined) newStop.arrival_time = stop.departure_time;
+            }
+            return newStop;
+          });
+          rev.stops_json = JSON.stringify(reversedStops);
+        } catch (e) {
+          rev.stops_json = sc.stops_json;
+        }
+
+        return rev;
+      });
+
+      let reverseLineInfo = null;
+      if (lineInfo) {
+        let revStations = [...lineInfo.stations].reverse();
+        if (stationFilterIds.length) {
+          const idSet = new Set(stationFilterIds);
+          idSet.add(lineInfo.stations[0].id);
+          idSet.add(lineInfo.stations[lineInfo.stations.length - 1].id);
+          const tmp = revStations.filter(st => idSet.has(st.id));
+          if (tmp.length >= 2) revStations = tmp;
+        }
+        reverseLineInfo = {
+          ...lineInfo,
+          stations: revStations,
+          departName: lineInfo.arriveeName,
+          arriveeName: lineInfo.departName
+        };
+      }
+
+      const tables = [];
+      if (direction === 'forward' || direction === 'both') tables.push({ lineInfo: forwardLineInfo, schedules: forwardSchedules, label: 'Aller' });
+      if ((direction === 'reverse' || direction === 'both') && reverseSchedules.length) tables.push({ lineInfo: reverseLineInfo, schedules: reverseSchedules, label: 'Retour' });
+
+      const pdfBytes = await buildPdf({ ligneId, orientation, tables, travaux, period });
+
+      return new Response(pdfBytes, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename=fiche-horaires-ligne-${ligneId}.pdf`,
+          'Cache-Control': 'no-store'
+        }
+      });
+    }
+
+    // Sinon format JSON: retourner les schedules et la lineInfo (avec stations construites)
     return NextResponse.json({
       ligneId,
       orientation,
       generatedAt: new Date().toISOString(),
       count: schedules.length,
-      schedules
+      schedules,
+      lineInfo
     });
-  } catch(e){
+  } catch (e) {
     console.error('GET /api/fiches-horaires error', e);
-    return NextResponse.json({ error:'Erreur serveur' }, { status:500 });
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   } finally {
     conn.release();
   }
 }
 
-export async function HEAD(request){
+export async function HEAD(request) {
   const { searchParams } = new URL(request.url);
-  const format = (searchParams.get('format')||'json').toLowerCase();
-  if(format==='pdf') return new Response(null,{ status:200, headers:{ 'Content-Type':'application/pdf' }});
-  return new Response(null,{ status:200 });
+  const format = (searchParams.get('format') || 'json').toLowerCase();
+  if (format === 'pdf') {
+    return new Response(null, {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf' }
+    });
+  }
+  return new Response(null, { status: 200 });
+}
+
+async function fetchLineInfo(ligneId, schedules) {
+  // Essaie d'abord de récupérer la ligne depuis la base principale (ferrovia_bfc)
+  let lineInfo = null;
+  const mainConn = await getDb().getConnection();
+  try {
+    // Récupérer d'abord les infos de base sur la ligne sans référencer des colonnes optionnelles
+    const [lineRows] = await mainConn.execute(
+      `SELECT l.id, l.depart_station_id, l.arrivee_station_id, ds.name AS departName, as2.name AS arriveeName
+       FROM lignes l
+       JOIN stations ds ON ds.id=l.depart_station_id
+       JOIN stations as2 ON as2.id=l.arrivee_station_id
+       WHERE l.id=? LIMIT 1`,
+      [ligneId]
+    );
+
+    if (lineRows.length) {
+      const lr = lineRows[0];
+
+      // Valeur brute depuis la table (peut être JSON, CSV, chaîne d'IDs, ou liste de noms)
+      // Lire la colonne `desservies` en essayant d'abord la colonne pluriel, puis singulier si nécessaire.
+      let rawDess = '';
+      try {
+        const [r] = await mainConn.execute('SELECT desservies FROM lignes WHERE id=? LIMIT 1', [ligneId]);
+        rawDess = r && r[0] && r[0].desservies != null ? String(r[0].desservies) : '';
+      } catch (errSelectDess) {
+        // Si la colonne `desservies` n'existe pas, essayer `desservie` (ancien schéma)
+        try {
+          const [r2] = await mainConn.execute('SELECT desservie FROM lignes WHERE id=? LIMIT 1', [ligneId]);
+          rawDess = r2 && r2[0] && r2[0].desservie != null ? String(r2[0].desservie) : '';
+        } catch (errSelectDess2) {
+          // Si aucun des deux n'est présent, laisser rawDess vide
+          rawDess = '';
+        }
+      }
+      rawDess = rawDess.replace(/\u00A0/g, ' ').trim(); // remplacer NBSP
+
+      let dessRaw = [];
+      try {
+        const parsed = JSON.parse(rawDess || '[]');
+        if (Array.isArray(parsed)) dessRaw = parsed.slice();
+        else if (typeof parsed === 'string' && parsed.trim()) {
+          // si la chaîne contient des séparateurs explicites, utiliser ',' ou ';'
+          if (/[,;]/.test(parsed)) dessRaw = parsed.split(/[;,]+/).map(s => s.trim()).filter(Boolean);
+          else dessRaw = [parsed.trim()];
+        }
+      } catch (e) {
+        if (typeof rawDess === 'string' && rawDess.trim()) {
+          const s = rawDess.trim();
+          // Prioriser virgules/; pour séparer noms composés. Si pas de séparateur et que la chaîne ressemble à "1 2 3" alors splitter sur espaces (IDs séparés par espaces)
+          if (/[,;]/.test(s)) dessRaw = s.split(/[;,]+/).map(x => x.trim()).filter(Boolean);
+          else if (/^\d+(?:\s+\d+)*$/.test(s)) dessRaw = s.split(/\s+/).map(x => x.trim()).filter(Boolean);
+          else dessRaw = [s];
+        } else dessRaw = [];
+      }
+
+      // Détecter si ce sont des IDs numériques (tous les éléments sont des nombres entiers)
+      const normalized = dessRaw.map(x => String(x).trim()).filter(Boolean);
+      const ids = normalized.length && normalized.every(s => /^\d+$/.test(s)) ? normalized.map(Number) : [];
+      const names = ids.length ? [] : normalized; // si pas d'IDs, on prendra ces valeurs comme noms
+
+      // Debug info
+      console.log('fetchLineInfo debug:', { rawDess: rawDess, normalized, ids, names });
+      if (ids.length) {
+        // Requêter par ID en conservant l'ordre
+        const placeholders = ids.map(() => '?').join(',');
+        let dessStations = [];
+        try {
+          const sql = `SELECT id, name FROM stations WHERE id IN (${placeholders}) ORDER BY FIELD(id, ${placeholders})`;
+          const params = [...ids, ...ids];
+          const [rows] = await mainConn.execute(sql, params);
+          dessStations = rows || [];
+        } catch (e) {
+          console.error('Erreur récupération stations par IDs:', e);
+          dessStations = [];
+        }
+
+        const nameById = {};
+        dessStations.forEach(r => { nameById[Number(r.id)] = r.name; });
+
+        const stationSeq = [lr.depart_station_id, ...ids, lr.arrivee_station_id];
+
+        lineInfo = {
+          id: lr.id,
+          departName: lr.departName,
+          arriveeName: lr.arriveeName,
+          stations: stationSeq.map(id => ({
+            id,
+            name: id === lr.depart_station_id ? lr.departName : (id === lr.arrivee_station_id ? lr.arriveeName : (nameById[id] || `Gare #${id}`))
+          }))
+        };
+        console.log('fetchLineInfo -> built stations (ids):', lineInfo.stations.map(s => s.name));
+      }
+      // Si on a des noms fournis dans `desservies`, résoudre par nom et garder l'ordre
+      else if (names.length) {
+        let dessStations = [];
+        try {
+          // Requête insensible à la casse: on compare LOWER(name)
+          const lcNames = names.map(s => String(s).toLowerCase());
+          const placeholders = lcNames.map(() => '?').join(',');
+          const sql = `SELECT id, name FROM stations WHERE LOWER(name) IN (${placeholders}) ORDER BY FIELD(LOWER(name), ${placeholders})`;
+          const params = [...lcNames, ...lcNames];
+          const [rows] = await mainConn.execute(sql, params);
+          dessStations = rows || [];
+        } catch (e) {
+          console.error('Erreur récupération stations par noms:', e);
+          dessStations = [];
+        }
+
+        const seqNames = [lr.departName, ...(dessStations.length ? dessStations.map(r => r.name) : names), lr.arriveeName];
+         const seen = new Set();
+         const unique = [];
+         seqNames.forEach(n => { if (n && !seen.has(n)) { seen.add(n); unique.push(n); } });
+
+         lineInfo = {
+           id: lr.id,
+           departName: lr.departName,
+           arriveeName: lr.arriveeName,
+           stations: unique.map((name, idx) => ({ id: idx + 1, name }))
+         };
+         console.log('fetchLineInfo -> built stations (names):', lineInfo.stations.map(s => s.name));
+       } else {
+         // Si aucune desservie définie, tenter de construire la liste depuis les schedules (fallback enrichi)
+         if (Array.isArray(schedules) && schedules.length > 0) {
+           // Même algorithme que le fallback global: prendre l'horaire avec le plus d'arrêts
+           const allSet = new Set();
+           const order = [];
+           let longest = null;
+           let longestStops = [];
+
+           schedules.forEach(sc => {
+             let stops = [];
+             try { stops = JSON.parse(sc.stops_json || '[]'); } catch {};
+             if (stops.length > longestStops.length) {
+               longestStops = stops;
+               longest = sc;
+             }
+           });
+
+           if (longest) {
+             const departStation = longest.departure_station || lr.departName;
+             const arrivalStation = longest.arrival_station || lr.arriveeName;
+
+             if (departStation && !allSet.has(departStation)) { allSet.add(departStation); order.push(departStation); }
+             longestStops.forEach(stop => {
+               const stName = stop.station_name || stop.station;
+               if (stName && !allSet.has(stName)) { allSet.add(stName); order.push(stName); }
+             });
+             if (arrivalStation && !allSet.has(arrivalStation)) { allSet.add(arrivalStation); order.push(arrivalStation); }
+
+             lineInfo = {
+               id: lr.id,
+               departName: departStation,
+               arriveeName: arrivalStation,
+               stations: order.map((name, idx) => ({ id: idx + 1, name }))
+             };
+            console.log('fetchLineInfo -> built stations (from schedules):', lineInfo.stations.map(s => s.name));
+           } else {
+             // si pas d'horaire exploitable, fallback simple départ/arrivée
+             lineInfo = {
+               id: lr.id,
+               departName: lr.departName,
+               arriveeName: lr.arriveeName,
+               stations: [
+                 { id: lr.depart_station_id, name: lr.departName },
+                 { id: lr.arrivee_station_id, name: lr.arriveeName }
+               ]
+             };
+            console.log('fetchLineInfo -> fallback simple stations:', lineInfo.stations.map(s => s.name));
+           }
+         } else {
+           // Si aucune desservie et pas de schedules, afficher au moins départ/arrivée
+           lineInfo = {
+             id: lr.id,
+             departName: lr.departName,
+             arriveeName: lr.arriveeName,
+             stations: [
+               { id: lr.depart_station_id, name: lr.departName },
+               { id: lr.arrivee_station_id, name: lr.arriveeName }
+             ]
+           };
+          console.log('fetchLineInfo -> fallback no dess + no schedules:', lineInfo.stations.map(s => s.name));
+         }
+       }
+     }
+   } catch (err) {
+     console.error('Erreur lors de la récupération de lineInfo depuis base principale:', err);
+   } finally {
+     mainConn.release();
+   }
+
+
+  return lineInfo;
 }

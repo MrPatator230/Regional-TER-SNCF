@@ -1,6 +1,30 @@
 "use client";
 import { useEffect, useState, useCallback } from 'react';
 
+// plus d'import fs/path côté client (incompatible)
+
+async function readFiches() {
+  try {
+    const res = await fetch('/api/admin/fiches');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
+}
+async function saveFiches(fiches) {
+  try {
+    await fetch('/api/admin/fiches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fiches }),
+    });
+  } catch (err) {
+    console.error('Erreur saveFiches', err);
+  }
+}
+
 export default function FichesHorairesGenerator(){
   const [lignes, setLignes] = useState([]);
   const [ligneId, setLigneId] = useState('');
@@ -12,6 +36,10 @@ export default function FichesHorairesGenerator(){
   const [pdfUrl, setPdfUrl] = useState('');
   const [autoPrint, setAutoPrint] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // force reload iframe
+  const [ficheType, setFicheType] = useState('horaire');
+  const [afficherPublique, setAfficherPublique] = useState(true);
+  const [tab, setTab] = useState('edition');
+  const [fiches, setFiches] = useState([]);
 
   // Charger lignes
   useEffect(()=>{
@@ -19,6 +47,12 @@ export default function FichesHorairesGenerator(){
     fetch('/api/lignes').then(r=>r.json()).then(j=>{ if(!abort){ setLignes(j.lignes||[]); if(!ligneId && j.lignes?.length) setLigneId(String(j.lignes[0].id)); }}).catch(()=>{});
     return ()=>{ abort=true; };
   },[]);
+
+  useEffect(() => {
+    let mounted = true;
+    readFiches().then(data => { if (mounted) setFiches(data || []); });
+    return () => { mounted = false };
+  }, [refreshKey]);
 
   const buildPdfUrl = useCallback(()=>{
     if(!ligneId) return '';
@@ -51,69 +85,135 @@ export default function FichesHorairesGenerator(){
     return ()=> iframe.removeEventListener('load', handler);
   },[pdfUrl, autoPrint]);
 
+  const handleSaveFiche = async () => {
+    const fiche = {
+      id: Date.now(),
+      ligneId,
+      orientation,
+      startDate,
+      endDate,
+      ficheType,
+      afficherPublique,
+      pdfUrl: buildPdfUrl(),
+      date: new Date().toISOString(),
+    };
+    const newFiches = [...fiches, fiche];
+    await saveFiches(newFiches);
+    setFiches(newFiches);
+    setTab('liste');
+  };
+
   const currentLine = lignes.find(l=> String(l.id)===String(ligneId));
 
   return (
     <div style={{padding:'1.5rem'}}>
       <h1 style={{fontSize:'1.9rem', marginBottom:'0.25rem'}}>GÉNÉRATEUR DE FICHES HORAIRES</h1>
-      <p style={{marginTop:0, color:'#444'}}>Sélectionnez une ligne, la période et l'orientation pour générer un PDF stylé. Prévisualisation ci‑dessous.</p>
-
-      <div style={{display:'flex', gap:'1.5rem', flexWrap:'wrap', alignItems:'flex-end', marginBottom:'1rem'}}>
-        <div>
-          <label style={{fontWeight:600, display:'block', marginBottom:4}}>Ligne</label>
-          <select value={ligneId} onChange={e=> setLigneId(e.target.value)} style={{padding:'6px 10px'}}>
-            {lignes.map(l=> <option key={l.id} value={l.id}>#{l.id} {l.depart_station_name} → {l.arrivee_station_name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{fontWeight:600, display:'block', marginBottom:4}}>Orientation</label>
-          <div style={{display:'flex', gap:6}}>
-            {['portrait','landscape'].map(o=> <button key={o} onClick={()=> setOrientation(o)} style={{padding:'6px 12px', background:o===orientation?'#0b2740':'#e1e5e9', color:o===orientation?'#fff':'#222', border:'none', borderRadius:4, cursor:'pointer'}}>{o==='portrait'?'Portrait':'Paysage'}</button>)}
-          </div>
-        </div>
-        <div>
-          <label style={{fontWeight:600, display:'block', marginBottom:4}}>Début</label>
-          <input type="date" value={startDate} onChange={e=> setStartDate(e.target.value)} />
-        </div>
-        <div>
-          <label style={{fontWeight:600, display:'block', marginBottom:4}}>Fin</label>
-          <input type="date" value={endDate} onChange={e=> setEndDate(e.target.value)} />
-        </div>
-        <div style={{alignSelf:'flex-end'}}>
-          <label style={{display:'flex', alignItems:'center', gap:6, fontSize:12}}>
-            <input type="checkbox" checked={autoPrint} onChange={e=> setAutoPrint(e.target.checked)} /> Impression auto
-          </label>
-        </div>
-        <div style={{alignSelf:'flex-end'}}>
-          <button onClick={generate} disabled={loading} style={{padding:'8px 18px', background:'#006cbe', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontWeight:600}}>{loading?'Génération…':'Générer le PDF'}</button>
-        </div>
-        {pdfUrl && (
-          <div style={{alignSelf:'flex-end'}}>
-            <a href={pdfUrl} download={`fiche-horaires-ligne-${ligneId}.pdf`} style={{textDecoration:'none', fontSize:14}}>Télécharger</a>
-          </div>
-        )}
+      <div style={{marginBottom:'1.5rem', display:'flex', gap:'2rem'}}>
+        <button onClick={()=>setTab('edition')} style={{fontWeight:600, fontSize:16, background:tab==='edition'?'#4b2e5c':'#eee', color:tab==='edition'?'#fff':'#333', border:'none', borderRadius:6, padding:'8px 24px', cursor:'pointer'}}>Édition</button>
+        <button onClick={()=>setTab('liste')} style={{fontWeight:600, fontSize:16, background:tab==='liste'?'#4b2e5c':'#eee', color:tab==='liste'?'#fff':'#333', border:'none', borderRadius:6, padding:'8px 24px', cursor:'pointer'}}>Liste des Fiches Horaires</button>
       </div>
+      {tab==='edition' && (
+        <div>
+          <p style={{marginTop:0, color:'#444'}}>Sélectionnez une ligne, la période et l'orientation pour générer un PDF stylé. Prévisualisation ci‑dessous.</p>
+          <div style={{display:'flex', gap:'1.5rem', flexWrap:'wrap', alignItems:'flex-end', marginBottom:'1rem'}}>
+            <div>
+              <label style={{fontWeight:600, display:'block', marginBottom:4}}>Ligne</label>
+              <select value={ligneId} onChange={e=> setLigneId(e.target.value)} style={{padding:'6px 10px'}}>
+                {lignes.map(l=> <option key={l.id} value={l.id}>#{l.id} {l.depart_station_name} → {l.arrivee_station_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontWeight:600, display:'block', marginBottom:4}}>Orientation</label>
+              <div style={{display:'flex', gap:6}}>
+                {['portrait','landscape'].map(o=> <button key={o} onClick={()=> setOrientation(o)} style={{padding:'6px 12px', background:o===orientation?'#0b2740':'#e1e5e9', color:o===orientation?'#fff':'#222', border:'none', borderRadius:4, cursor:'pointer'}}>{o==='portrait'?'Portrait':'Paysage'}</button>)}
+              </div>
+            </div>
+            <div>
+              <label style={{fontWeight:600, display:'block', marginBottom:4}}>Début</label>
+              <input type="date" value={startDate} onChange={e=> setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label style={{fontWeight:600, display:'block', marginBottom:4}}>Fin</label>
+              <input type="date" value={endDate} onChange={e=> setEndDate(e.target.value)} />
+            </div>
+            <div>
+              <label style={{fontWeight:600, display:'block', marginBottom:4}}>Type de fiche horaire</label>
+              <select value={ficheType} onChange={e=>setFicheType(e.target.value)} style={{padding:'6px 10px'}}>
+                <option value="horaire">Fiche horaire</option>
+                <option value="travaux">Fiche de travaux</option>
+              </select>
+            </div>
+            <div>
+              <label style={{fontWeight:600, display:'block', marginBottom:4}}>Afficher sur la page des fiches horaires</label>
+              <input type="checkbox" checked={afficherPublique} onChange={e=>setAfficherPublique(e.target.checked)} />
+            </div>
+            <div style={{alignSelf:'flex-end'}}>
+              <label style={{display:'flex', alignItems:'center', gap:6, fontSize:12}}>
+                <input type="checkbox" checked={autoPrint} onChange={e=> setAutoPrint(e.target.checked)} /> Impression auto
+              </label>
+            </div>
+            <div style={{alignSelf:'flex-end'}}>
+              <button onClick={generate} disabled={loading} style={{padding:'8px 18px', background:'#006cbe', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontWeight:600}}>{loading?'Génération…':'Générer le PDF'}</button>
+            </div>
+            {pdfUrl && (
+              <div style={{alignSelf:'flex-end'}}>
+                <a href={pdfUrl} download={`fiche-horaires-ligne-${ligneId}.pdf`} style={{textDecoration:'none', fontSize:14}}>Télécharger</a>
+              </div>
+            )}
+          </div>
 
-      {currentLine && (
-        <div style={{marginBottom:'0.75rem', fontSize:12, color:'#555'}}>Relation: {currentLine.depart_station_name} → {currentLine.arrivee_station_name}</div>
+          {currentLine && (
+            <div style={{marginBottom:'0.75rem', fontSize:12, color:'#555'}}>Relation: {currentLine.depart_station_name} → {currentLine.arrivee_station_name}</div>
+          )}
+
+          {error && <div style={{color:'#b00020', marginBottom:'0.75rem'}}>{error}</div>}
+
+          <div style={{border:'1px solid #ccc', background:'#fafafa', padding:'6px 10px', fontSize:12, fontWeight:600, fontFamily:'Avenir,Helvetica,Arial'}}>PRÉVISUALISATION</div>
+          <div style={{border:'1px solid #ccc', borderTop:'none', minHeight: '400px', background:'#fff'}}>
+            {!pdfUrl && <div style={{padding:'1rem', color:'#777', fontSize:14}}>Aucun PDF généré pour le moment.</div>}
+            {pdfUrl && (
+              <iframe
+                key={refreshKey}
+                id="pdfPreviewIframe"
+                src={pdfUrl}
+                title="Prévisualisation PDF"
+                style={{width:'100%', height:'900px', border:'none'}}
+              />
+            )}
+          </div>
+
+          <div style={{marginTop:'2rem'}}>
+            <button onClick={handleSaveFiche} style={{padding:'8px 18px', background:'#b51f2b', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontWeight:600}}>Enregistrer la fiche</button>
+          </div>
+        </div>
       )}
-
-      {error && <div style={{color:'#b00020', marginBottom:'0.75rem'}}>{error}</div>}
-
-      <div style={{border:'1px solid #ccc', background:'#fafafa', padding:'6px 10px', fontSize:12, fontWeight:600, fontFamily:'Avenir,Helvetica,Arial'}}>PRÉVISUALISATION</div>
-      <div style={{border:'1px solid #ccc', borderTop:'none', minHeight: '400px', background:'#fff'}}>
-        {!pdfUrl && <div style={{padding:'1rem', color:'#777', fontSize:14}}>Aucun PDF généré pour le moment.</div>}
-        {pdfUrl && (
-          <iframe
-            key={refreshKey}
-            id="pdfPreviewIframe"
-            src={pdfUrl}
-            title="Prévisualisation PDF"
-            style={{width:'100%', height:'900px', border:'none'}}
-          />
-        )}
-      </div>
+      {tab==='liste' && (
+        <div style={{background:'#f8f8f8', borderRadius:12, padding:'24px', marginTop:'12px'}}>
+          <h2 style={{color:'#4b2e5c', fontWeight:700, fontSize:'1.3rem', marginBottom:'18px'}}>Fiches horaires affichées sur la page publique</h2>
+          <table style={{width:'100%', borderCollapse:'collapse', background:'#fff'}}>
+            <thead>
+              <tr style={{background:'#e6e6e6'}}>
+                <th style={{padding:'8px', fontWeight:600}}>Ligne</th>
+                <th style={{padding:'8px', fontWeight:600}}>Type</th>
+                <th style={{padding:'8px', fontWeight:600}}>Période</th>
+                <th style={{padding:'8px', fontWeight:600}}>PDF</th>
+                <th style={{padding:'8px', fontWeight:600}}>Date création</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fiches.filter(f=>f.afficherPublique).map(f=> (
+                <tr key={f.id}>
+                  <td style={{padding:'8px'}}>{f.ligneId}</td>
+                  <td style={{padding:'8px'}}>{f.ficheType==='horaire'?'Fiche horaire':'Fiche de travaux'}</td>
+                  <td style={{padding:'8px'}}>{f.startDate} - {f.endDate}</td>
+                  <td style={{padding:'8px'}}><a href={f.pdfUrl} target="_blank" rel="noopener" style={{color:'#006cbe'}}>Voir PDF</a></td>
+                  <td style={{padding:'8px'}}>{new Date(f.date).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
-

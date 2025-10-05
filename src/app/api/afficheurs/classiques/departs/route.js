@@ -290,6 +290,25 @@ export async function GET(req){
     }
 
     // construire la liste finale en incluant la time de passage (pass_time) et les stops complets
+    const scheduleIds = (chosenAnnotated || []).map(a => a.raw.id).filter(Boolean);
+    // Amélioration de la logique de récupération des quais assignés
+    const assignedMap = {}; // schedule_id -> platform
+    if(scheduleIds.length > 0){
+      // Prioriser la récupération directe depuis la base de données pour garantir la cohérence
+      try{
+        const placeholders = scheduleIds.map(()=>'?').join(',');
+        const sql = `SELECT schedule_id, platform FROM schedule_platforms WHERE station_id = ? AND schedule_id IN (${placeholders})`;
+        const [platRows] = await scheduleQuery(sql, [st.id, ...scheduleIds]);
+        if(Array.isArray(platRows)){
+          platRows.forEach(pr => {
+            assignedMap[pr.schedule_id] = pr.platform || null;
+          });
+        }
+      }catch(e){
+        console.warn('Erreur récupération quais assignés:', e);
+      }
+    }
+
     const list = (chosenAnnotated || []).map(a=>{
       const r = a.raw;
       // Inclure la gare d'origine (départ) en tête de stops
@@ -297,10 +316,23 @@ export async function GET(req){
         { station_name: r.departure_station, arrival_time: null, departure_time: r.departure_time },
         ...parseStopsJson(r.stops_json).filter(s=> (s.station_name!==r.departure_station))
       ];
-      // Trouver voie (non stockée) -> placeholder '1' ou '2' aléatoire stable
-      const voie = (parseInt(r.train_number,10)||0)%2? '1':'2';
+
+      // Logique améliorée pour l'attribution des quais
+      // Vérifier s'il y a un quai assigné par l'admin pour ce sillon à cette gare
+      const adminPlatform = assignedMap[r.id];
+
+      // Nouvelle logique : respecter strictement les attributions administratives
+      let platformToShow = null;
+      if (adminPlatform !== undefined) {
+        // Si une attribution existe (même vide), la respecter
+        platformToShow = adminPlatform && String(adminPlatform).trim() !== '' ? String(adminPlatform) : null;
+      } else {
+        // Si aucune attribution admin, ne pas inventer de quai par défaut
+        platformToShow = null;
+      }
+
       const trainType = r.train_type || 'TER';
-      const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg'; // fallback vers TER
+      const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg';
 
       return {
         id: r.id,
@@ -311,13 +343,14 @@ export async function GET(req){
         arrival_station: r.arrival_station,
         stops: allStops.map(s=> ({ station_name: s.station_name, arrival_time: s.arrival_time, departure_time: s.departure_time })),
         horaire_afficheur: a.passTime || null, // horaire pertinent pour la gare demandée
-        voie,
+        voie: platformToShow || '',
+        platform: platformToShow,
         status: 'A L\'HEURE'
       };
     }).slice(0,10);
 
     if(debug){
-      return NextResponse.json({ gare: gareName, departures: list, debug: { nowHM, debugInfo, annotated } });
+      return NextResponse.json({ gare: gareName, departures: list, debug: { nowHM, debugInfo, annotated, assignedMap } });
     }
     return NextResponse.json({ gare: gareName, departures: list });
   } catch(e){

@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import Marquee from '../../../../components/Marquee';
+import { platformForStation } from '@/app/utils/platform';
 
 export default function AfficheurClassiqueDeparts(){
   const [data,setData]=useState(null);
@@ -216,8 +217,8 @@ export default function AfficheurClassiqueDeparts(){
     if(end && iso > end) return false;
 
     // hasDaySpec indique qu'on a au moins une information explicite sur les jours
-    let hasDaySpec = false;
-    // 2.5) prise en charge de days_mask (entier, chaîne binaire ou liste '1;2;3') — 1=Lundi ... 7=Dimanche
+        let hasDaySpec = false;
+// 2.5) prise en charge de days_mask (entier, chaîne binaire ou liste '1;2;3') — 1=Lundi ... 7=Dimanche
     try{
       // inclure ici les variantes de nommage utilisées par la BDD / API :
       // days_mask_list (nouveau format '1;2;3'), days_mask, daysMask, daysmask, daysMaskInt
@@ -357,7 +358,7 @@ export default function AfficheurClassiqueDeparts(){
   const contentRef = useRef(null);   // inner content to translate
   const translateRef = useRef(0);    // current translateY in px
   const rafRef = useRef(null);
-  const cycleTimerRef = useRef(null);
+  const cycleTimeoutRef = useRef(null);
   const startDelay = 10000; // 10s initial wait
 
   // animate helper: animate translateRef.current toward target px
@@ -426,18 +427,18 @@ export default function AfficheurClassiqueDeparts(){
     if(contentRef.current){ translateRef.current = 0; contentRef.current.style.transform = `translateY(0px)`; }
     // clear any timers/raf
     if(rafRef.current) cancelAnimationFrame(rafRef.current);
-    if(cycleTimerRef.current) clearTimeout(cycleTimerRef.current);
+    if(cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
 
     // schedule initial start
-    cycleTimerRef.current = setTimeout(async function runCycle(){
+    cycleTimeoutRef.current = setTimeout(async function runCycle(){
       await startCycle();
       // after finishing a cycle, schedule next run after startDelay
-      cycleTimerRef.current = setTimeout(runCycle, startDelay);
+      cycleTimeoutRef.current = setTimeout(runCycle, startDelay);
     }, startDelay);
 
     return ()=>{
       if(rafRef.current) cancelAnimationFrame(rafRef.current);
-      if(cycleTimerRef.current) clearTimeout(cycleTimerRef.current);
+      if(cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
     };
   }, [departures]);
 
@@ -471,120 +472,140 @@ export default function AfficheurClassiqueDeparts(){
           {error && !loading && <div className="row error">{error}</div>}
           {!loading && !error && !departures.length && <div className="row empty">Aucun départ prochain</div>}
 
-          {departures.map((d,i)=>{
-             const stops = d.stops || [];
-             const normGare = normalizeLabel(gare);
-             const currentIdx = stops.findIndex(s => {
-               const lbl = normalizeLabel(getStopLabel(s));
-               return lbl === normGare || lbl.startsWith(normGare) || normGare.startsWith(lbl);
-             });
-             const currentStop = currentIdx>=0 ? stops[currentIdx] : (stops.length?stops[0]:null);
-             // Heures : priorité à l'heure de passage *au niveau du stop correspondant à la gare demandée*
-             // On recherche d'abord dans le stop courant (départ), en prenant departure_time puis arrival_time.
-             let stationTime = '';
-             if(currentStop){
-               stationTime = currentStop.departure_time || currentStop.departure || currentStop.arrival_time || currentStop.arrival || '';
-             }
-             // fallback : utiliser l'horaire affiché calculé côté API, puis la departure_time globale, puis autres heuristiques
-             const timeRaw = stationTime || d.horaire_afficheur || d.pass_time || d.departure_time || getStopTime(d) || getStopTime(stops[0]) || getStopTime(stops[stops.length-1]) || '';
-             const timeFmt = timeRaw ? String(timeRaw).replace(':','h') : '';
-             const lastStop = (stops && stops.length) ? stops[stops.length-1] : null;
-             let destinationName = '';
-             if(d){
-               if(d.arrival_station) destinationName = getStopLabel(d.arrival_station) || String(d.arrival_station||'').trim();
-               else if(d.destination_station) destinationName = getStopLabel(d.destination_station) || String(d.destination_station||'').trim();
-               else if(d.destination) destinationName = (typeof d.destination === 'string') ? String(d.destination).trim() : getStopLabel(d.destination);
-             }else if(lastStop){
-               destinationName = getStopLabel(lastStop);
-             }
-             destinationName = String(destinationName||'').trim();
+          {departures.map((d, i) => {
+            const stops = d.stops || [];
+            const normGare = normalizeLabel(gare);
+            const currentIdx = stops.findIndex(s => {
+              const lbl = normalizeLabel(getStopLabel(s));
+              return lbl === normGare || lbl.startsWith(normGare) || normGare.startsWith(lbl);
+            });
+            const currentStop = currentIdx >= 0 ? stops[currentIdx] : (stops.length ? stops[0] : null);
 
-             const trainNumber = d.number || d.train_number || d.code || d.name || d.id || '';
-             const served = (stops || []).map(s => getStopLabel(s)).filter(Boolean);
-             // valeurs initiales issues de l'API de départ
-             let cancelled = !!d.cancelled;
-             let delay = (typeof d.delay_min === 'number' && d.delay_min>0) ? d.delay_min : (d.delay || 0);
+            let stationTime = '';
+            if (currentStop) {
+              stationTime = currentStop.departure_time || currentStop.departure || currentStop.arrival_time || currentStop.arrival || '';
+            }
 
-             // fusionner avec les perturbations chargées depuis /api/perturbations/daily
-             if(Array.isArray(perturbations) && perturbations.length){
-               const match = perturbations.find(p=>{
-                 if(!p) return false;
-                 // id exact
-                 if(p.id && d.id && String(p.id) === String(d.id)) return true;
-                 // numéro ou code de train
-                 const pnum = p.train_number || p.number || p.code || p.train || p.id;
-                 if(pnum){
-                   if(String(pnum) === String(d.number) || String(pnum) === String(d.train_number) || String(pnum) === String(d.code)) return true;
-                   if(String(pnum) === String(d.number) || String(pnum) === String(d.train_number) || String(pnum) === String(d.code)) return true;
-                 // heure + destination approximative
-                 const ptime = p.time || p.departure_time || p.scheduled_departure_time || p.horaire_afficheur;
-                 if(ptime && timeRaw){
-                   const normTime = s=>String(s||'').replace(/[^0-9]/g,'');
-                   if(normTime(ptime) === normTime(timeRaw)){
-                     const pdest = p.destination || p.destination_name || p.arrival_station || p.stop || p.dest || p.to;
-                     if(!pdest) return true; // heure suffit
-                     const n = s=>String(s||'').toLowerCase().replace(/\s*\(.*?\)\s*/g,'').trim();
-                     if(n(pdest) && n(destinationName) && (n(pdest).includes(n(destinationName)) || n(destinationName).includes(n(pdest)))) return true;
-                   }
-                   }
-                 }
-                 return false;
-               });
-               if(match){
-                 const m = match;
-                 const mStatus = String(m.status || m.type || '').toLowerCase();
-                 if(m.cancelled === true || mStatus.includes('supprim') || mStatus.includes('cancel')){ cancelled = true; delay = 0; }
-                 else {
-                   const pd = m.delay_min ?? m.delay ?? m.delay_minutes ?? m.delayMin ?? null;
-                   const pdNum = pd != null ? Number(pd) : NaN;
-                   if(!Number.isNaN(pdNum) && pdNum > 0) delay = pdNum;
-                 }
-               }
-             }
-             // status text inline rendering used in JSX; no separate variable to avoid unused warning
-             return (
-               <div className={`row ${i%2?'alt':''}`} key={d.id||i}>
-                 <div className="cell logo"><Image src={getLogoFor((d.type||'').toString().toLowerCase())} alt={d.type||'type'} width={135} height={54} /></div>
+            const timeRaw = stationTime || d.horaire_afficheur || d.pass_time || d.departure_time || getStopTime(d) || getStopTime(stops[0]) || getStopTime(stops[stops.length - 1]) || '';
+            const timeFmt = timeRaw ? String(timeRaw).replace(':', 'h') : '';
+
+            const lastStop = (stops && stops.length) ? stops[stops.length - 1] : null;
+            let destinationName = '';
+            if (d) {
+              if (d.arrival_station) destinationName = getStopLabel(d.arrival_station) || String(d.arrival_station || '').trim();
+              else if (d.destination_station) destinationName = getStopLabel(d.destination_station) || String(d.destination_station || '').trim();
+              else if (d.destination) destinationName = (typeof d.destination === 'string') ? String(d.destination).trim() : getStopLabel(d.destination);
+            } else if (lastStop) {
+              destinationName = getStopLabel(lastStop);
+            }
+            destinationName = String(destinationName || '').trim();
+
+            const trainNumber = d.number || d.train_number || d.code || d.name || d.id || '';
+            const served = (stops || []).map(s => getStopLabel(s)).filter(Boolean);
+
+            let cancelled = !!d.cancelled;
+            let delay = (typeof d.delay_min === 'number' && d.delay_min > 0) ? d.delay_min : (d.delay || 0);
+
+            // Modification de la logique d'affichage des quais
+            // Prefer platform provided directly by the API (server-side includes admin assignment as `platform` when present).
+            // Also accept `d.voie` when present from the server. Treat null/empty string as explicit "(Aucun)".
+            const apiAssigned = (d.platform !== undefined && d.platform !== null) ? d.platform : (d.voie !== undefined && d.voie !== null ? d.voie : undefined);
+            let platformToShow = null;
+            if (apiAssigned !== undefined) {
+              const val = apiAssigned === null ? '' : String(apiAssigned);
+              platformToShow = val.trim() !== '' ? apiAssigned : '—'; // Afficher "—" au lieu de masquer la box
+            } else {
+              // No explicit platform from API: try to resolve from admin assignment heuristics and fallbacks
+              const resolvedAdminPlatform = platformForStation(d, gare);
+              if (resolvedAdminPlatform !== null && resolvedAdminPlatform !== undefined) {
+                platformToShow = String(resolvedAdminPlatform).trim() !== '' ? resolvedAdminPlatform : '—';
+              } else {
+                const fallbackPlatform = d.voie || d.platform || d.platform_code || d.track;
+                platformToShow = fallbackPlatform || '—'; // Toujours afficher une box, même vide avec "—"
+              }
+            }
+
+            if (Array.isArray(perturbations) && perturbations.length) {
+              const match = perturbations.find(p => {
+                if (!p) return false;
+                if (p.id && d.id && String(p.id) === String(d.id)) return true;
+                const pnum = p.train_number || p.number || p.code || p.train || p.id;
+                if (pnum) {
+                  if (String(pnum) === String(d.number) || String(pnum) === String(d.train_number) || String(pnum) === String(d.code)) return true;
+                }
+                const ptime = p.time || p.departure_time || p.scheduled_departure_time || p.horaire_afficheur;
+                if (ptime && timeRaw) {
+                  const normTime = s => String(s || '').replace(/[^0-9]/g, '');
+                  if (normTime(ptime) === normTime(timeRaw)) {
+                    const pdest = p.destination || p.destination_name || p.arrival_station || p.stop || p.dest || p.to;
+                    if (!pdest) return true;
+                    const n = s => String(s || '').toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
+                    if (n(pdest) && n(destinationName) && (n(pdest).includes(n(destinationName)) || n(destinationName).includes(n(pdest)))) return true;
+                  }
+                }
+                return false;
+              });
+              if (match) {
+                const m = match;
+                const mStatus = String(m.status || m.type || '').toLowerCase();
+                if (m.cancelled === true || mStatus.includes('supprim') || mStatus.includes('cancel')) { cancelled = true; delay = 0; }
+                else {
+                  const pd = m.delay_min ?? m.delay ?? m.delay_minutes ?? m.delayMin ?? null;
+                  const pdNum = pd != null ? Number(pd) : NaN;
+                  if (!Number.isNaN(pdNum) && pdNum > 0) delay = pdNum;
+                }
+              }
+            }
+
+            return (
+              <div className={`row ${i % 2 ? 'alt' : ''}`} key={d.id || i}>
+                <div className="cell logo"><Image src={getLogoFor((d.type || '').toString().toLowerCase())} alt={d.type || 'type'} width={135} height={54} /></div>
+
                 <div className="cell status">
                   <div className="meta-top">
                     {showStatus ? (
                       cancelled ? (
-                        // supprimé : ligne unique "supprimé"
                         <div className="status-stack cancelled">
                           <span className="status-primary">supprimé</span>
                         </div>
                       ) : (delay ? (
-                        // retardé : deux lignes "retardé" + "+XX min"
                         <div className="status-stack delayed">
                           <span className="status-primary">retardé</span>
                           <span className="status-secondary">+{delay} min</span>
                         </div>
                       ) : (
-                        // à l'heure
                         <span className={`status-text ontime`}>à l'heure</span>
                       ))
                     ) : (
-                      <div className="type-block"><div className="type-name">{getTypeName((d.type||'').toString().toLowerCase())}</div><div className="train-number">{trainNumber}</div></div>
+                      <div className="type-block">
+                        <div className="type-name">{getTypeName((d.type || '').toString().toLowerCase())}</div>
+                        <div className="train-number">{trainNumber}</div>
+                      </div>
                     )}
                   </div>
                 </div>
-                {/* masquer l'heure uniquement lorsque le statut 'supprimé' est affiché (showStatus && cancelled) */}
+
                 <div className="cell time"><span>{(!showStatus || !cancelled) ? timeFmt : ''}</span></div>
-                 <div className="cell destination">
-                   <div className="dest-main">{destinationName || '—'}</div>
-                   {served.length > 0 && i < 2 && (
-                     <div className="served-list" title={served.join(' • ')}>
-                       <span className="served-title">Via :</span>
-                       <div className="served-mask">
-                         <Marquee className="served-inline">{served.join(' • ')}</Marquee>
-                       </div>
-                     </div>
-                   )}
-                 </div>
-                 <div className="cell voie"><div className="voie-box">{d.voie || d.platform || ''}</div></div>
-               </div>
-             );
-           })}
+
+                <div className="cell destination">
+                  <div className="dest-main">{destinationName || '—'}</div>
+                  {served.length > 0 && i < 2 && (
+                    <div className="served-list" title={served.join(' • ')}>
+                      <span className="served-title">Via :</span>
+                      <div className="served-mask">
+                        <Marquee className="served-inline">{served.join(' • ')}</Marquee>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modifier le rendu pour toujours afficher la box de quai */}
+                <div className="cell voie"><div className="voie-box">{platformToShow}</div></div>
+
+              </div>
+            );
+
+          })}
 
           </div>
         </div>

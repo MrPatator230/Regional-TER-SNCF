@@ -95,7 +95,35 @@ export async function GET(req){
       WHERE (s.arrival_station_id=? OR s.stops_json LIKE ?)
       ORDER BY s.arrival_time ASC`, [st.id, `%${likeParam}%`]);
 
-    // Pour chaque sillon, déterminer l'heure pertinente pour la gare demandée
+    const scheduleIds = (rows || []).map(r => r.id).filter(Boolean);
+    const assignedMap = {};
+    if(scheduleIds.length){
+      try{
+        const origin = new URL(req.url).origin;
+        const url = `${origin}/api/quais?stationName=${encodeURIComponent(st.name)}&limit=2000`;
+        const r = await fetch(url, { cache: 'no-store' });
+        const j = await r.json().catch(()=>null);
+        if(r.ok && j && Array.isArray(j.items)){
+          j.items.forEach(it => { if(it && it.schedule_id) assignedMap[it.schedule_id] = it.platform ?? ''; });
+        }
+      }catch(_){ /* ignore */ }
+
+      // Amélioration de la logique de récupération des quais assignés pour les arrivées
+      if(Object.keys(assignedMap).length === 0){
+        try{
+          const placeholders = scheduleIds.map(()=>'?').join(',');
+          const [platRows] = await scheduleQuery(`SELECT schedule_id, platform FROM schedule_platforms WHERE station_id = ? AND schedule_id IN (${placeholders})`, [st.id, ...scheduleIds]);
+          if(Array.isArray(platRows)){
+            platRows.forEach(pr => {
+              assignedMap[pr.schedule_id] = pr.platform || null;
+            });
+          }
+        }catch(e){
+          console.warn('Erreur récupération quais assignés pour arrivées:', e);
+        }
+      }
+    }
+
     const list = rows.map(r => {
       const stops = parseStopsJson(r.stops_json);
       let horaire_afficheur = null;
@@ -110,9 +138,23 @@ export async function GET(req){
         const stop = stops.find(s => s.station_name === st.name);
         horaire_afficheur = stop?.arrival_time || stop?.departure_time || null;
       }
-      const voie = (parseInt(r.train_number,10)||0)%2? '1':'2';
+
+      // Logique améliorée pour l'attribution des quais dans les arrivées
+      const adminPlatform = assignedMap[r.id];
+
+      // Nouvelle logique : respecter strictement les attributions administratives
+      let platformToShow = null;
+      if (adminPlatform !== undefined) {
+        // Si une attribution existe (même vide), la respecter
+        platformToShow = adminPlatform && String(adminPlatform).trim() !== '' ? String(adminPlatform) : null;
+      } else {
+        // Si aucune attribution admin, ne pas inventer de quai par défaut
+        platformToShow = null;
+      }
+
       const trainType = r.train_type || 'TER';
       const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg';
+
       return {
         id: r.id,
         number: r.train_number,
@@ -122,7 +164,8 @@ export async function GET(req){
         origin_station: r.departure_station,
         stops: stops.map(s=>s.station_name),
         horaire_afficheur,
-        voie,
+        voie: platformToShow || '',
+        platform: platformToShow,
         status: 'A L\'HEURE'
       };
     }).filter(r => r.horaire_afficheur).slice(0,10);

@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS `sillons` (
   `departure_time`           TIME NOT NULL,
   `arrival_time`             TIME NOT NULL,
   `days_mask`                TINYINT UNSIGNED NOT NULL DEFAULT 31,
+  `days_mask_list`           VARCHAR(32) DEFAULT NULL,
   `flag_holidays`            TINYINT(1) NOT NULL DEFAULT 0,
   `flag_sundays`             TINYINT(1) NOT NULL DEFAULT 0,
   `flag_custom`              TINYINT(1) NOT NULL DEFAULT 0,
@@ -308,6 +309,7 @@ CREATE PROCEDURE create_schedule(
   IN p_departure_time TIME,
   IN p_arrival_time TIME,
   IN p_days_mask TINYINT UNSIGNED,
+  IN p_days_mask_list VARCHAR(32),
   IN p_flag_holidays TINYINT,
   IN p_flag_sundays TINYINT,
   IN p_flag_custom TINYINT,
@@ -318,12 +320,12 @@ BEGIN
     ligne_id, train_number, train_type, rolling_stock,
     departure_station_id, arrival_station_id,
     departure_time, arrival_time,
-    days_mask, flag_holidays, flag_sundays, flag_custom
+    days_mask, days_mask_list, flag_holidays, flag_sundays, flag_custom
   ) VALUES (
     p_ligne_id, p_train_number, p_train_type, p_rolling_stock,
     p_departure_station_id, p_arrival_station_id,
     p_departure_time, p_arrival_time,
-    p_days_mask, p_flag_holidays, p_flag_sundays, p_flag_custom
+    p_days_mask, p_days_mask_list, p_flag_holidays, p_flag_sundays, p_flag_custom
   );
   SET @new_id = LAST_INSERT_ID();
   CALL set_schedule_stops(@new_id, p_stops);

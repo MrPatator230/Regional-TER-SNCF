@@ -1,12 +1,13 @@
 /* Réécriture complète du CSS de l'afficheur EVA Arrivées */
 :root{
-  --bg-dark:#071033;      /* fond général */
-  --navy-ink:#0b1230;     /* texte principal sombre */
-  --panel-bg:#f3f1f4;     /* panneau clair des rangées */
-  --accent-green:#05d08b; /* colonne verte / accents */
-  --accent-orange:#ff9a3a;/* alertes orange */
-  --accent-red:#e44949;   /* suppression / erreur */
+  --bg-dark:#071033;
+  --navy-ink:#0b1230;
+  --panel-bg:#f3f1f4;
+  --accent-green:#05d08b;
+  --accent-orange:#ff9a3a;
+  --accent-red:#e44949;
   --border-dark:rgba(11,18,48,0.9);
+  --marquee-duration: 18s; /* Défaut pour l'animation du via-marquee */
 }
 
 /* Base & layout */
@@ -16,7 +17,7 @@
   flex-direction:column;
   background:var(--bg-dark);
   color:var(--navy-ink);
-  font-family: Achemine, 'Helvetica Neue', Arial, sans-serif;
+  font-family:"Achemine", "Avenir", sans-serif;
 }
 
 /* --- Top bar --- */
@@ -24,150 +25,251 @@
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:18px 28px;
+  padding:18px 36px; /* augmenté pour donner plus de hauteur */
   background:var(--bg-dark);
-  border-bottom:6px solid rgba(9,25,52,0.9);
-  gap:12px;
+  border-bottom: 6px solid rgba(5,208,139,0.06); /* discret */
+  min-height:110px;
 }
-.eva-left{display:flex;align-items:center;gap:18px}
+.eva-left{display:flex;align-items:center;gap:20px}
 .eva-icon{
-  width:86px;height:86px;border-radius:10px;background:var(--accent-green);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--bg-dark);font-weight:900;box-shadow:inset 0 -6px 0 rgba(0,0,0,0.06)
-}
-.eva-title .big{font-size:56px;font-weight:900;color:#fff;letter-spacing:1px}
-.eva-title .sub{font-size:18px;color:var(--accent-green);margin-top:2px;font-weight:700}
-.eva-clock{display:flex;align-items:center;gap:10px}
-.clock-hm{background:transparent;color:var(--accent-green);font-size:36px;font-weight:900;padding:10px 18px;border-radius:10px;border:4px solid var(--accent-green);color:#fff}
-.clock-sec{font-size:20px;color:var(--accent-green);font-weight:800;margin-left:6px}
-
-/* --- Board & rows --- */
-.eva-board{flex:1;overflow:auto;display:flex;flex-direction:column;padding:18px;gap:18px;background:linear-gradient(180deg,var(--bg-dark),var(--bg-dark) 60%,var(--bg-dark));}
-.eva-row{
-  display:grid;
-  grid-template-columns:220px 1fr 120px 200px;
-  align-items:center;
-  min-height:120px;
-  background:var(--panel-bg);
-  border-radius:8px;
-  box-shadow:inset 0 -8px 0 rgba(9,25,52,0.06);
-  overflow:hidden;
-  position:relative;
-}
-.eva-row + .eva-row{border-top:10px solid rgba(9,25,52,0.95)}
-.eva-row.message{justify-content:center;font-size:36px;font-weight:800;color:#fff;background:transparent;border:0}
-
-/* --- Time column (panneau intérieur avec HH:MM + pilule) --- */
-.timecol{display:flex;align-items:center;justify-content:center;padding:8px}
-.time-inner{
-  /* panneau gauche distinct : teinte légèrement plus saturée à gauche */
-  width:100%;
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start; /* heure à gauche */
-  gap:12px;
-  padding:18px 18px 18px 28px; /* plus de padding gauche pour l'heure */
-  border-radius:6px;
-  background: linear-gradient(90deg, rgba(229,228,238,1) 0%, rgba(243,241,244,1) 40%, rgba(243,241,244,1) 100%);
-  box-sizing:border-box;
-  position:relative;
-  /* léger trait vertical interne pour séparer la zone horaire du reste */
-  box-shadow: inset -6px 0 0 rgba(9,25,52,0.06);
-}
-.time-h{
-  font-size:104px; /* ajusté pour rentrer dans la colonne */
-  font-weight:900;
-  color:var(--navy-ink);
-  line-height:0.88;
-  letter-spacing:-0.02em;
-  margin:0;
-  /* forcer align left and prevent wrapping */
-  white-space:nowrap;
-}
-.time-pill{
-  display:inline-flex;
-  align-items:center;
-  gap:12px;
-  padding:8px 16px;
-  border-radius:999px;
-  font-weight:800;
-  font-size:20px;
-  border:4px solid var(--border-dark);
-  background:transparent;
-  color:var(--navy-ink);
-  box-shadow:none;
-  margin-top:6px;
-  margin-left:0; /* align to left inside panel */
-}
-.time-pill .time-pill-icon{
-  width:32px;
-  height:32px;
-  border-radius:50%;
+  font-size: 4.5rem; /* plus grand pour ressembler à l'icône de l'image */
+  color: var(--accent-green);
   display:flex;
   align-items:center;
   justify-content:center;
-  background:var(--border-dark);
-  color:#fff;
-  font-size:14px;
+  width:86px; height:86px; border-radius:10px;
+  background: linear-gradient(180deg, rgba(5,208,139,0.06), transparent);
 }
-.time-pill.blue{background:transparent;border-color:var(--border-dark);color:var(--navy-ink)}
-.time-pill.orange{background:var(--accent-orange);border-color:rgba(0,0,0,0.06);color:#0b1230}
-.time-pill.red{background:var(--accent-red);border-color:rgba(0,0,0,0.06);color:#fff}
+.eva-title .main{font-size:100px;font-weight:900;color:#ffffff;letter-spacing:2px;line-height:0.95}
+.eva-title .sub{font-size:30px;color:var(--accent-green);margin-top:-4px;font-weight:800;letter-spacing:1px}
 
-/* Ensure the pill sits visually inside the left panel (slight offset) */
-.time-inner .time-pill{transform:translateY(0);}
+/* Clock styling to match pixel look */
+.eva-clock{display:flex;align-items:center;gap:8px; border-radius:12px;}
+.clock-box{display:flex;align-items:center;gap:10px;padding:8px 18px;border-radius:10px; background: rgba(11,18,48,1); border:4px solid var(--accent-green);}
+.clock-hm{background:transparent;color:#ffffff;font-size:64px;font-weight:900;line-height:1; padding:0 6px}
+.clock-sec{font-size:30px;color:var(--accent-green);font-weight:900; margin-bottom:6px; background:transparent; padding-left:8px; border-left:2px solid rgba(5,208,139,0.18)}
+
+/* header color rules: keep title and sub title colors explicit to ensure contrast */
+.eva-topbar{color:inherit}
+
+/* --- Board & rows --- */
+.eva-board{flex:1;overflow:auto;display:flex;flex-direction:column;padding:12px;gap:12px;}
+.eva-row{
+  display:grid;
+  grid-template-columns:275px 1fr 120px 160px;
+  align-items:stretch;
+  height:168px;
+  width: 1868px;
+  background:var(--panel-bg);
+  border-radius:8px;
+  box-shadow:inset 0 -6px 0 rgba(9,25,52,0.06);
+  overflow:hidden;
+}
+
+/* --- Time column --- */
+.timecol{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 8px;
+    border-right: 2px solid #e0e0e0;
+    background-color: #D3D4E4;
+}
+.time-inner{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:8px;
+  padding: 12px;
+}
+.time-h{
+  font-size:80px;
+  font-weight:900;
+  color:var(--navy-ink);
+  line-height:1;
+}
+.time-h.cancelled {
+    text-decoration: line-through;
+    color: #a0a0a0;
+}
+
+.time-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width: 240px;
+  height: 53px;
+  border-radius:999px;
+  font-weight:500;
+  font-size:38px;
+  border: 4px solid #3B3B66;
+  box-sizing: border-box;
+}
+.time-pill-icon {
+    display: flex;
+    align-items: center;
+    color: #3B3B66;
+}
+
+.time-pill.blue{background:transparent;color:#3B3B66;}
+.time-pill.orange{background:transparent;color:var(--navy-ink);}
+.time-pill.red{background:transparent;color:var(--accent-red);}
+
+/* Lorsque la ligne est retardée, afficher la pastille avec fond #FF974E et texte en blanc */
+.eva-row.delayed .time-pill.orange {
+  background: #FF974E;
+  color: #fff;
+  border-color: #FF974E;
+}
+.eva-row.delayed .time-pill.orange .time-pill-icon {
+  color: #fff;
+}
+
+/* Supprimer tout caractère barré pour une ligne retardée */
+.eva-row.delayed .time-h,
+.eva-row.delayed .dest-origin,
+.eva-row.delayed .dest-main,
+.eva-row.delayed .route-label,
+.eva-row.delayed .via-line,
+.eva-row.delayed .voie-label,
+.eva-row.delayed .voie-letter,
+.eva-row.delayed .train-type,
+.eva-row.delayed .train-number,
+.eva-row.delayed .time-pill,
+.eva-row.delayed .dest-badge {
+  text-decoration: none !important;
+}
 
 /* --- Destination / info column --- */
-.destcol{padding:8px 18px}
-.dest-main{font-size:64px;font-weight:900;color:var(--navy-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:12px}
-.dest-badge{margin-left:12px;background:var(--accent-orange);color:var(--navy-ink);padding:8px 12px;border-radius:8px;font-weight:800;font-size:18px}
-.via-line{margin-top:10px;display:flex;align-items:center;gap:12px;font-size:26px;color:#3f6b8d}
-.via-line .via-prefix{color:var(--accent-green);font-weight:800;margin-right:6px}
-.via-item{display:inline-flex;align-items:center;color:#3f6b8d}
-.via-item .dot{width:12px;height:12px;border-radius:50%;background:var(--accent-green);display:inline-block;margin:0 12px}
-.via-item.crossed{color:rgba(11,18,48,0.45);text-decoration:line-through}
-.via-item .cross-mark{color:var(--accent-orange);margin-left:6px;font-weight:800}
+.destcol {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 12px 18px;
+  height: 100%;
+}
+.dest-origin {
+  font-size: 70px;
+  font-weight: 900;
+  color: var(--navy-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: "Achemine", "Avenir", sans-serif;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.dest-main{
+  height: auto;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy-ink);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+.dest-badge{margin-left:12px;padding: 4px 8px;border-radius:6px;font-weight:700;font-size:14px}
+.dest-badge.orange { background: var(--accent-orange); color: var(--navy-ink); }
+.dest-badge.red { background: var(--accent-red); color: #fff; }
 
-/* --- Voie column (sombre carré) --- */
+.via-line{
+  margin-top:4px;
+    margin-left:4px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:38px; /* même taille que .time-pill-text */
+  color:#3f6b8d;
+  max-width:1300px; /* Limite la zone d'affichage demandée */
+  position: relative; /* conteneur pour le marquee */
+  /* garder le texte sur une ligne; le contenu défilera en boucle */
+  white-space: nowrap;
+  overflow: hidden; /* le parent .eva-row permet d'afficher le débordement si besoin */
+}
+
+/* Conteneur visible du défilement (la zone de 850px) */
+.via-marquee{
+  display:inline-block;
+  vertical-align:middle;
+  width: calc(1300px - 0px); /* retire la largeur approximative du label "via" pour éviter chevauchement */
+  max-width: calc(100% - 120px);
+  overflow: hidden; /* la piste pourra bien dépasser si l'ancêtre le permet */
+}
+
+/* Piste contenant deux fois la séquence pour boucler en continu */
+.via-track{
+  display:flex;
+  align-items:center;
+  gap:20px;
+  white-space: nowrap;
+  will-change: transform;
+  /* animation activée uniquement quand la classe .scrolling est ajoutée (définie en JS) */
+  /* animation activée uniquement quand la classe .scrolling est ajoutée */
+}
+
+.via-track.scrolling{
+  /* utiliser la variable si fournie, avec défaut 18s */
+  animation-name: via-scroll;
+  animation-duration: var(--marquee-duration, 18s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* Séparateur rond vert entre deux via-items (si on ne veut pas d'élément supplémentaire en HTML) */
+.via-item + .via-item::before{
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  margin: 0 12px;
+  flex: 0 0 auto;
+}
+
+/* Petite variante si on met un .dot dans le HTML (compatibilité) */
+.via-item .dot{ width:10px;height:10px;border-radius:50%;background:var(--accent-green);display:inline-block;margin:0 12px}
+
+@keyframes via-scroll{
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* --- Voie column --- */
 .voiecol{display:flex;align-items:center;justify-content:center;padding:8px}
-.voie-box-outer{background:var(--border-dark);color:#fff;width:110px;height:110px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;box-sizing:border-box}
-.voie-label{font-size:16px;font-weight:800;color:#9fb7d1}
-.voie-letter{font-size:56px;font-weight:900;line-height:1;margin-top:6px}
+.voie-box-outer{background:var(--border-dark);color:#fff;width:90px;height:90px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;box-sizing:border-box}
+.voie-label{font-size:14px;font-weight:700;color:#9fb7d1}
+.voie-letter{font-size:40px;font-weight:900;line-height:1;margin-top:4px}
 
 /* --- Green type/number column --- */
-.greencol{display:flex;align-items:center;justify-content:center;padding:0;margin:0;background:var(--accent-green);border-radius:0 14px 14px 0}
-.train-green{background:transparent;padding:8px 18px;display:flex;flex-direction:column;align-items:center;gap:6px}
-.train-type{font-size:20px;font-weight:800;color:var(--navy-ink)}
-.train-number{font-size:36px;font-weight:900;color:var(--navy-ink);letter-spacing:2px}
+.greencol{background:var(--accent-green); display: flex; align-items: center; justify-content: center;}
+.train-green{padding:8px 18px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.train-type{font-size:18px;font-weight:800;color:var(--navy-ink)}
+.train-number{font-size:24px;font-weight:900;color:var(--navy-ink);letter-spacing:1px}
 
 /* --- Footer alert --- */
-.eva-footer{background:var(--accent-orange);padding:18px 24px;display:flex;align-items:center;gap:18px;border-radius:8px;margin:18px}
+.eva-footer{background:var(--accent-orange);padding:12px 24px;margin:12px; border-radius: 8px;}
 .warning{display:flex;align-items:center;gap:16px;flex:1}
-.wi{width:72px;height:72px;border-radius:40px;background:#fff;color:var(--accent-orange);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:36px}
-.wt{font-size:22px;font-weight:700;color:var(--navy-ink);line-height:1.2}
-.footer-right{font-weight:800;color:var(--navy-ink)}
-
-/* --- Responsives --- */
-@media (max-width:1400px){
-  .eva-title .big{font-size:40px}
-  .time-h{font-size:86px}
-  .dest-main{font-size:44px}
-  .voie-box-outer{width:80px;height:80px}
-  .eva-row{grid-template-columns:180px 1fr 100px 140px;min-height:84px}
+.wi{
+    font-size: 2rem;
+    color: var(--bg-dark);
 }
-@media (max-width:900px){
-  .eva-topbar{padding:12px}
-  .eva-row{grid-template-columns:140px 1fr 90px 110px;min-height:72px}
-  .time-h{font-size:44px}
-  .dest-main{font-size:28px}
-  .dest-badge{font-size:14px;padding:6px 8px}
-  .time-pill{font-size:16px;padding:6px 10px}
+.wt{font-size:18px;font-weight:700;color:var(--navy-ink);line-height:1.2}
+
+.eva-empty {
+    color: white;
+    text-align: center;
+    padding-top: 50px;
 }
-
-/* petits détails d'accessibilité/visuels */
-.eva-board::-webkit-scrollbar{height:10px;width:10px}
-.eva-board::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:6px}
-
-/* message row special */
-.eva-row.message{background:transparent}
-
-/* ensure pill text doesn't overflow */
-.time-pill-text{white-space:nowrap}
+.message {
+    color: white;
+    text-align: center;
+    font-size: 24px;
+    padding: 20px;
+}
+.error {
+    color: var(--accent-red);
+}

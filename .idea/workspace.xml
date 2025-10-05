@@ -5,15 +5,32 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Update database configuration and enhance perturbation handling in schedules">
+      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/scripts/test-parse-desservies.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/admin/fiches/route.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/perturbations/daily/sync/route.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/fiches-horaires/SearchForm.client.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/data/region.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/data/region.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/horaires_scheme.sql" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/horaires_scheme.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/layout.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/layout.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/page.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/globals.css" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/globals.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/layout.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/layout.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/prochains-departs/[id]/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/se-deplacer/prochains-departs/[id]/page.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db-schedule.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db-schedule.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/js/db.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/arrivees/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/arrivees/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/departs/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/departs/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.css" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.css" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/arrivees/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/arrivees/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/departs/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/departs/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/eva/arrivees/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/eva/arrivees/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/fiches-horaires/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/fiches-horaires/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/perturbations/daily/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/perturbations/daily/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/schedules/import/parse/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/schedules/import/parse/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/schedules/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/schedules/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/fiches-horaires/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/fiches-horaires/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/lib/schedules-service.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/lib/schedules-service.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,30 +67,30 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "js.debugger.nextJs.config.created.client": "true",
-    "js.debugger.nextJs.config.created.server": "true",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/Users/mgrillot/Documents/développement WEB/Regional-TER-SNCF/public/img/brand",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.0",
-    "settings.editor.selected.configurable": "advanced.settings",
-    "ts.external.directory.path": "/Users/mgrillot/Library/Application Support/JetBrains/IntelliJIdea2025.2/plugins/javascript-plugin/jsLanguageServicesImpl/external",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;js.debugger.nextJs.config.created.client&quot;: &quot;true&quot;,
+    &quot;js.debugger.nextJs.config.created.server&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/mgrillot/Documents/développement WEB/Regional-TER-SNCF/public/img/brand&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.0&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;advanced.settings&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;/Users/mgrillot/Library/Application Support/JetBrains/IntelliJIdea2025.2/plugins/javascript-plugin/jsLanguageServicesImpl/external&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/brand" />
@@ -135,7 +152,8 @@
       <workItem from="1759356384280" duration="156000" />
       <workItem from="1759403272991" duration="9775000" />
       <workItem from="1759437244130" duration="8708000" />
-      <workItem from="1759520789290" duration="2894000" />
+      <workItem from="1759520789290" duration="32801000" />
+      <workItem from="1759667061162" duration="5998000" />
     </task>
     <task id="LOCAL-00001" summary="Alpha V4.0.5 // INITIAL COMMIT">
       <option name="closed" value="true" />
