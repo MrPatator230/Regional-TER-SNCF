@@ -730,7 +730,7 @@ export default function AfficheurClassiqueArrivees(){
                                 platformToShow = fallbackPlatform || '—'; // Toujours afficher une box, même vide avec "—"
                               }
                             }
-                                    
+
                                     // status text inline rendering used in JSX; no separate variable to avoid unused warning
                                     return (
                                       <div className={`row ${i%2?'alt':''}`} key={d.id||i}>

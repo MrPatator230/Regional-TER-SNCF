@@ -4,22 +4,26 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Add new route for fetching and posting schedule data; enhance platform assignment logic">
-      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/fix_sillons_migration.sql" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/migrations/2025-10-05-normalize-days_mask.sql" afterDir="false" />
+    <list default="true" id="ad3d8e72-2ddf-4564-a5e7-a80700f4aa4f" name="Changes" comment="Refactor terminus handling in horaires_scheme.sql; update EVA departures CSS for improved layout">
+      <change afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/migrations/2025-01-06-fix-complete-stops-json.sql" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/data/region.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/data/region.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/horaires_scheme.sql" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/horaires_scheme.sql" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/public/img/type/data.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/arrivees/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/arrivees/page.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/departs/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/classiques/departs/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.css" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/arrivees/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.css" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/afficheurs/eva/departs/page.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/arrivees/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/arrivees/route.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/departs/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/classiques/departs/route.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/eva/arrivees/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/eva/arrivees/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/eva/departs/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/afficheurs/eva/departs/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/fiches-horaires/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/fiches-horaires/route.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/quais/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/quais/route.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/schedules/route.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/api/schedules/route.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/SchedulesClient.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/SchedulesClient.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/schedule-form-reducer.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/espace/admin/schedules/schedule-form-reducer.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/lib/schedules-service.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/lib/schedules-service.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/page.js" beforeDir="false" afterPath="$PROJECT_DIR$/../../développement WEB/Regional-TER-SNCF/src/app/page.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -78,6 +82,11 @@
     &quot;settings.editor.selected.configurable&quot;: &quot;advanced.settings&quot;,
     &quot;ts.external.directory.path&quot;: &quot;/Users/mgrillot/Library/Application Support/JetBrains/IntelliJIdea2025.2/plugins/javascript-plugin/jsLanguageServicesImpl/external&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  },
+  &quot;keyToStringList&quot;: {
+    &quot;DatabaseDriversLRU&quot;: [
+      &quot;mysql&quot;
+    ]
   }
 }</component>
   <component name="RecentsManager">
@@ -144,7 +153,11 @@
       <workItem from="1759520789290" duration="32801000" />
       <workItem from="1759667061162" duration="7489000" />
       <workItem from="1759674719919" duration="2412000" />
-      <workItem from="1759679431837" duration="11634000" />
+      <workItem from="1759679431837" duration="20959000" />
+      <workItem from="1759710685003" duration="26213000" />
+      <workItem from="1760033972673" duration="6531000" />
+      <workItem from="1760047433313" duration="4171000" />
+      <workItem from="1760100601636" duration="6455000" />
     </task>
     <task id="LOCAL-00001" summary="Alpha V4.0.5 // INITIAL COMMIT">
       <option name="closed" value="true" />
@@ -202,7 +215,15 @@
       <option name="project" value="LOCAL" />
       <updated>1759673265557</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="Add tests for days service and conversion; normalize day formats in JSON data">
+      <option name="closed" value="true" />
+      <created>1759700125331</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1759700125331</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -229,7 +250,9 @@
     <MESSAGE value="Ajout de la logique de résolution des identifiants de sillons et intégration des perturbations dans les horaires" />
     <MESSAGE value="Update database configuration and enhance perturbation handling in schedules" />
     <MESSAGE value="Add new route for fetching and posting schedule data; enhance platform assignment logic" />
-    <option name="LAST_COMMIT_MESSAGE" value="Add new route for fetching and posting schedule data; enhance platform assignment logic" />
+    <MESSAGE value="Add tests for days service and conversion; normalize day formats in JSON data" />
+    <MESSAGE value="Refactor terminus handling in horaires_scheme.sql; update EVA departures CSS for improved layout" />
+    <option name="LAST_COMMIT_MESSAGE" value="Refactor terminus handling in horaires_scheme.sql; update EVA departures CSS for improved layout" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

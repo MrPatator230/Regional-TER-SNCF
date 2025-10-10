@@ -380,23 +380,43 @@ END $$
 DELIMITER ;
 
 -- ===================================================================
--- PROCEDURE : rebuild_schedule_stops_json (met à jour sillons)
+-- PROCEDURE : rebuild_schedule_stops_json (VERSION CORRIGÉE COMPLÈTE)
+-- Génère un JSON avec structure: {"Origine": ..., "Desservies": [...], "Terminus": ...}
+-- INCLUT TOUTES LES GARES du tab "Arrêts" dans "Desservies" avec construction manuelle
 -- ===================================================================
 DROP PROCEDURE IF EXISTS rebuild_schedule_stops_json;
 DELIMITER $$
 CREATE PROCEDURE rebuild_schedule_stops_json(IN p_schedule_id INT UNSIGNED)
 BEGIN
-  DECLARE nb INT DEFAULT 0;
   DECLARE dep_station_name VARCHAR(190);
   DECLARE arr_station_name VARCHAR(190);
   DECLARE dep_time VARCHAR(5);
   DECLARE arr_time VARCHAR(5);
-  DECLARE max_order INT DEFAULT 0;
+  DECLARE nb_stops INT DEFAULT 0;
+  DECLARE done INT DEFAULT FALSE;
+  DECLARE stop_station VARCHAR(190);
+  DECLARE stop_arrival VARCHAR(5);
+  DECLARE stop_departure VARCHAR(5);
+  DECLARE stop_dwell INT;
+  DECLARE desservies_json TEXT DEFAULT '';
 
-  SELECT COUNT(*) INTO nb FROM schedule_stops WHERE schedule_id = p_schedule_id;
-  SELECT IFNULL(MAX(stop_order), 0) INTO max_order FROM schedule_stops WHERE schedule_id = p_schedule_id;
+  -- Curseur pour parcourir les arrêts
+  DECLARE stops_cursor CURSOR FOR
+    SELECT s.name,
+           IFNULL(DATE_FORMAT(st.arrival_time,'%H:%i'), NULL),
+           IFNULL(DATE_FORMAT(st.departure_time,'%H:%i'), NULL),
+           CASE
+             WHEN st.arrival_time IS NULL OR st.departure_time IS NULL THEN NULL
+             ELSE GREATEST(0, (TIME_TO_SEC(st.departure_time) - TIME_TO_SEC(st.arrival_time)) DIV 60)
+           END
+    FROM schedule_stops st
+    JOIN stations s ON s.id = st.station_id
+    WHERE st.schedule_id = p_schedule_id
+    ORDER BY st.stop_order;
 
-  -- Récupérer infos du sillon (nom gares et horaires)
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+  -- Récupérer les informations du sillon (gares de départ/arrivée et horaires)
   SELECT ds.name, as2.name, DATE_FORMAT(s.departure_time,'%H:%i'), DATE_FORMAT(s.arrival_time,'%H:%i')
     INTO dep_station_name, arr_station_name, dep_time, arr_time
   FROM sillons s
@@ -404,57 +424,91 @@ BEGIN
   JOIN stations as2 ON as2.id = s.arrival_station_id
   WHERE s.id = p_schedule_id;
 
-  IF nb = 0 THEN
-    -- Aucun arrêt défini : trajet direct origine -> terminus
-    SET @agg = JSON_OBJECT(
-      'Origine', JSON_OBJECT('station_name', dep_station_name, 'arrival_time', NULL, 'departure_time', dep_time, 'dwell_minutes', NULL),
+  -- Compter le nombre d'arrêts intermédiaires
+  SELECT COUNT(*) INTO nb_stops FROM schedule_stops WHERE schedule_id = p_schedule_id;
+
+  IF nb_stops = 0 THEN
+    -- Aucun arrêt intermédiaire : trajet direct origine -> terminus
+    SET @final_json = JSON_OBJECT(
+      'Origine', JSON_OBJECT(
+        'arrival_time', NULL,
+        'station_name', dep_station_name,
+        'dwell_minutes', NULL,
+        'departure_time', dep_time
+      ),
       'Desservies', JSON_ARRAY(),
-      'Terminus', JSON_OBJECT('station_name', arr_station_name, 'arrival_time', arr_time, 'departure_time', NULL, 'dwell_minutes', NULL)
+      'Terminus', JSON_OBJECT(
+        'arrival_time', arr_time,
+        'station_name', arr_station_name,
+        'dwell_minutes', NULL,
+        'departure_time', NULL
+      )
     );
-    SET @sig = NULL;
+    SET @signature = CONCAT('DIRECT:', p_schedule_id);
   ELSE
-    -- Desservies : toutes les gares sauf la dernière (terminus)
-    -- Inclut la première gare (après origine) et toutes les gares intermédiaires
-    SELECT IFNULL(CONCAT('[', GROUP_CONCAT(
-      JSON_OBJECT(
-        'station_name', s.name,
-        'arrival_time', IFNULL(DATE_FORMAT(st.arrival_time,'%H:%i'), NULL),
-        'departure_time', IFNULL(DATE_FORMAT(st.departure_time,'%H:%i'), NULL),
-        'dwell_minutes', CASE
-          WHEN st.arrival_time IS NULL OR st.departure_time IS NULL THEN NULL
-          ELSE GREATEST(0, (TIME_TO_SEC(st.departure_time) - TIME_TO_SEC(st.arrival_time)) DIV 60)
-        END
-      ) ORDER BY st.stop_order SEPARATOR ','
-    ), ']'), '[]')
-    INTO @desservies
-    FROM schedule_stops st
-    JOIN stations s ON s.id = st.station_id
-    WHERE st.schedule_id = p_schedule_id
-      AND st.stop_order < max_order;  -- Exclut seulement le dernier arrêt (terminus)
+    -- Construire manuellement le tableau des gares désservies
+    SET desservies_json = '[';
 
-    -- Récupérer les informations du terminus (dernier arrêt)
-    SELECT s.name, DATE_FORMAT(st.arrival_time,'%H:%i')
-      INTO @terminus_name, @terminus_arrival
-    FROM schedule_stops st
-    JOIN stations s ON s.id = st.station_id
-    WHERE st.schedule_id = p_schedule_id
-      AND st.stop_order = max_order;
+    OPEN stops_cursor;
 
-    SET @agg = JSON_OBJECT(
-      'Origine', JSON_OBJECT('station_name', dep_station_name, 'arrival_time', NULL, 'departure_time', dep_time, 'dwell_minutes', NULL),
-      'Desservies', CAST(@desservies AS JSON),
-      'Terminus', JSON_OBJECT('station_name', IFNULL(@terminus_name, arr_station_name), 'arrival_time', IFNULL(@terminus_arrival, arr_time), 'departure_time', NULL, 'dwell_minutes', NULL)
+    stops_loop: LOOP
+      FETCH stops_cursor INTO stop_station, stop_arrival, stop_departure, stop_dwell;
+      IF done THEN
+        LEAVE stops_loop;
+      END IF;
+
+      -- Ajouter virgule si ce n'est pas le premier élément
+      IF desservies_json != '[' THEN
+        SET desservies_json = CONCAT(desservies_json, ',');
+      END IF;
+
+      -- Construire l'objet JSON pour cette gare avec échappement des guillemets
+      SET desservies_json = CONCAT(desservies_json, '{',
+        '"arrival_time":', IF(stop_arrival IS NULL, 'null', CONCAT('"', REPLACE(stop_arrival, '"', '\\"'), '"')), ',',
+        '"station_name":"', REPLACE(stop_station, '"', '\\"'), '",',
+        '"dwell_minutes":', IF(stop_dwell IS NULL, 'null', stop_dwell), ',',
+        '"departure_time":', IF(stop_departure IS NULL, 'null', CONCAT('"', REPLACE(stop_departure, '"', '\\"'), '"')),
+        '}'
+      );
+    END LOOP;
+
+    CLOSE stops_cursor;
+
+    SET desservies_json = CONCAT(desservies_json, ']');
+
+    -- Construction du JSON final avec la structure attendue
+    SET @final_json = JSON_OBJECT(
+      'Origine', JSON_OBJECT(
+        'arrival_time', NULL,
+        'station_name', dep_station_name,
+        'dwell_minutes', NULL,
+        'departure_time', dep_time
+      ),
+      'Desservies', CAST(desservies_json AS JSON),
+      'Terminus', JSON_OBJECT(
+        'arrival_time', arr_time,
+        'station_name', arr_station_name,
+        'dwell_minutes', NULL,
+        'departure_time', NULL
+      )
     );
 
-    SELECT GROUP_CONCAT(st.station_id ORDER BY st.stop_order SEPARATOR '-') INTO @sig
+    -- Génération de la signature pour optimisation
+    SELECT CONCAT(
+      'FULL:', p_schedule_id, '-',
+      GROUP_CONCAT(st.station_id ORDER BY st.stop_order SEPARATOR '-')
+    ) INTO @signature
     FROM schedule_stops st
     WHERE st.schedule_id = p_schedule_id;
   END IF;
 
+  -- Mise à jour du sillon avec le JSON complet
   UPDATE `sillons`
-    SET stops_json = COALESCE(@agg, '{"Origine":null,"Desservies":[],"Terminus":null}'),
-        stops_signature = @sig
+    SET stops_json = @final_json,
+        stops_signature = @signature,
+        updated_at = CURRENT_TIMESTAMP
   WHERE id = p_schedule_id;
+
 END $$
 DELIMITER ;
 

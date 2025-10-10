@@ -250,7 +250,7 @@ export default function Home() {
   useEffect(()=>{ setPassengers(travellers.length); },[travellers]);
 
   const [stationChoices] = useState([
-    { name: 'Dijon Ville' },
+    { name: 'Dijon' },
     { name: 'Besançon Viotte' },
     { name: 'Seurre' },
     { name: 'Laroche - Migennes' }

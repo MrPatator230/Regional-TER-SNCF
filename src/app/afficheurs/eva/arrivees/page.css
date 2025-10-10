@@ -66,6 +66,11 @@
   overflow:hidden;
 }
 
+/* Quand aucun quai n'est disponible, supprimer la colonne 'voie' de la grille */
+.eva-row.no-voie{
+  grid-template-columns: 275px 1fr 160px; /* time | dest | green */
+}
+
 /* --- Time column --- */
 .timecol{
     display:flex;

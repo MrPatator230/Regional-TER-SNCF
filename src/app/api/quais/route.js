@@ -33,7 +33,7 @@ async function resolveStationId(conn, { stationId, stationName }){
 }
 
 export async function GET(request){
-  const err = await ensureAdmin(); if(err) return err;
+  // GET public : ne nécessite pas d'authentification (utilisé par les afficheurs)
   const { searchParams } = new URL(request.url);
   const stationId = searchParams.get('stationId');
   const stationName = searchParams.get('stationName');

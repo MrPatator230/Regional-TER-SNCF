@@ -5,8 +5,8 @@ import { FaTrain } from "react-icons/fa";
 import { FaCircleInfo } from "react-icons/fa6";
 import { FaClock } from "react-icons/fa";
 import { MdCancel } from "react-icons/md";
-import Image from 'next/image';
 import Marquee from '../../../../components/Marquee';
+import { platformForStation } from '@/app/utils/platform';
 
 export default function AfficheurEVAArrivees(){
   const [data,setData]=useState(null);
@@ -15,11 +15,11 @@ export default function AfficheurEVAArrivees(){
   const [now,setNow]=useState(new Date());
   const [showDelayAlt, setShowDelayAlt] = useState(true); // toggler pour alternance "retardé" / "+XX min"
   const [perturbations, setPerturbations] = useState([]);
+  // Map des attributions admin (schedule_id -> platform)
+  const [adminPlatformsMap, setAdminPlatformsMap] = useState({});
   const search = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const gare = search ? (search.get('gare') || '').trim() : '';
   const dateParam = search ? (search.get('date') || search.get('jour') || null) : null;
-  const fromParam = search ? (search.get('from') || null) : null;
-  const toParam = search ? (search.get('to') || null) : null;
   const fallbackParam = search ? (search.get('fallback') || null) : null;
   const shouldFallback = fallbackParam === null ? true : (['1','true','yes'].includes(String(fallbackParam).toLowerCase()));
 
@@ -241,6 +241,33 @@ export default function AfficheurEVAArrivees(){
     return ()=>{ aborted = true; if(timer) clearInterval(timer); };
   },[]);
 
+  // --- Synchronisation des attributions centralisées (API /api/quais) ---
+  useEffect(()=>{
+    if(!gare) return;
+    let abort = false;
+    async function loadAdminPlatforms(){
+      try{
+        const url = `/api/quais?stationName=${encodeURIComponent(gare)}&limit=2000`;
+        const r = await fetch(url, { cache: 'no-store' });
+        if(!r.ok){ if(!abort) setAdminPlatformsMap({}); return; }
+        const j = await r.json().catch(()=>null);
+        if(abort) return;
+        const map = {};
+        if(j && Array.isArray(j.items)){
+          j.items.forEach(it => {
+            if(!it) return;
+            const sid = it.schedule_id !== undefined && it.schedule_id !== null ? String(it.schedule_id) : null;
+            if(sid) map[sid] = (it.platform !== undefined && it.platform !== null) ? it.platform : '';
+          });
+        }
+        setAdminPlatformsMap(map);
+      }catch(_){ if(!abort) setAdminPlatformsMap({}); }
+    }
+    loadAdminPlatforms();
+    const tid = setInterval(loadAdminPlatforms, 30000);
+    return ()=>{ abort = true; clearInterval(tid); };
+  },[gare]);
+
   // Utilitaires et mapping (repris de l'afficheur classique pour cohérence)
   function safeToStr(v){ if(v === undefined || v === null) return ''; try{ return String(v).trim(); }catch(e){ return ''; } }
   function normalizeIdNum(v){ if(v === undefined || v === null) return null; const n = Number(v); return Number.isNaN(n) ? null : n; }
@@ -296,17 +323,15 @@ export default function AfficheurEVAArrivees(){
 
         const perturbation = perturbations.find((p)=>{
           const pSid = normalizeIdNum(p.schedule_id ?? p.sillon_id ?? p.sillonId ?? p.sillonId);
-          const pDate = p.date ? String(p.date).slice(0,10) : null;
           if(!pSid || !sId) return false;
           if(pSid !== sId) return false;
-          if(pDate && pDate !== visibleDateStr) return false;
+          if(p.date && String(p.date).slice(0,10) !== visibleDateStr) return false;
           return true;
         });
 
         if(perturbation){
           const mapped = mapPerturbToStatusLocal(perturbation);
           const isSupp = mapped.status_key === 'cancelled';
-          const isDelay = mapped.status_key === 'delayed';
           const delayVal = mapped.delay != null ? Number(mapped.delay) : (perturbation.delay_minutes != null ? Number(perturbation.delay_minutes) : (d.delay_minutes != null ? Number(d.delay_minutes) : (d.delay_min != null ? Number(d.delay_min) : null)));
 
           return {
@@ -354,7 +379,7 @@ export default function AfficheurEVAArrivees(){
     const endOfDay = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate(), 23,59,59,999);
     return arrivals.filter(d=>{
       // ne considérer que les trains qui ont un stop correspondant
-      const {stop, index} = getStopForGare(d);
+      const {stop} = getStopForGare(d);
   // Filtrer les arrivées à venir uniquement (on utilise `visibleArrivals` basées sur today/tomorrow)
       // vérifier jours de service
       if(!matchesServiceDays(d, refDate)) return false;
@@ -379,7 +404,7 @@ export default function AfficheurEVAArrivees(){
   let filteredToday = filterForDate(baseRefDate);
   // ne garder que ceux qui n'ont pas encore passé l'heure maintenant
   const nowTime = new Date(now);
-  const notPassedToday = filteredToday.filter(d=>{
+  let filtered = filteredToday.filter(d=>{
     const {stop} = getStopForGare(d);
     const plannedRaw = stop.arrival_time_planned || stop.planned_time || d.planned_time || d.scheduled_time || null;
     const expectedRaw = stop.arrival_time || d.expected_time || d.arrival_time || null;
@@ -387,8 +412,6 @@ export default function AfficheurEVAArrivees(){
     return eff && eff.getTime() >= nowTime.getTime();
   });
 
-  let filtered = notPassedToday;
-  let showingNextDay = false;
   if ((filtered.length === 0) && shouldFallback) {
     // essayer de garder les trains restants aujourd'hui (heure >= now), sinon basculer sur demain
     const todayDate = baseRefDate;
@@ -404,10 +427,8 @@ export default function AfficheurEVAArrivees(){
 
     if (remainingToday.length > 0) {
       filtered = remainingToday;
-      showingNextDay = false;
     } else {
       filtered = filterForDate(tomorrowDate);
-      showingNextDay = true;
     }
   }
 
@@ -440,10 +461,8 @@ export default function AfficheurEVAArrivees(){
 
         {visibleArrivals.map((d,i)=>{
           const stops = d.stops || [];
-          const intermediateStops = stops.slice(1, Math.max(1, stops.length-1));
 
           const currentStopIdx = d.stops ? d.stops.findIndex(s=> s.station_name === gare) : -1;
-          const stopsBeforeGare = currentStopIdx > 0 ? stops.slice(0, currentStopIdx) : [];
 
           const currentStop = currentStopIdx >= 0 ? stops[currentStopIdx] : null;
           const plannedRaw = currentStop?.arrival_time_planned || currentStop?.planned_time || d.planned_time || d.scheduled_time || d.scheduled_arrival_time || null;
@@ -452,15 +471,34 @@ export default function AfficheurEVAArrivees(){
           const expectedDate = parseTimeValue(expectedRaw);
           const timeDisplay = fmtTime(expectedRaw || plannedRaw || '');
 
-          let origin = '';
-          if (stops.length && stops[0].station_name) {
-            origin = stops[0].station_name;
-          } else if (d.origin_station) {
-            origin = d.origin_station;
+          let origin;
+          if (stops.length && stops[0].station_name) origin = stops[0].station_name;
+          else if (d.origin_station) origin = d.origin_station;
+          if (!origin) origin = 'Origine inconnue';
+
+          // Déterminer la plateforme à afficher en priorisant les attributions admin/API
+          const resolvedAdminPlatform = platformForStation(d, gare);
+          let voieToShow = null;
+           // Déterminer un possible schedule id pour chercher dans adminPlatformsMap
+           const { stop } = getStopForGare(d);
+           const candidatesForId = [d.id, d.schedule_id, d.sillon_id, d.sillonId, (stop && (stop.id || stop.sillon_id || stop.schedule_id))];
+           const sId = candidatesForId.map(normalizeIdNum).find(x => x !== null);
+           const adminAssignedRaw = (sId !== undefined && sId !== null && adminPlatformsMap && adminPlatformsMap[String(sId)] !== undefined) ? adminPlatformsMap[String(sId)] : undefined;
+
+          if (adminAssignedRaw !== undefined) {
+            // admin a explicitement défini un quai (même vide) -> si vide => pas d'affichage
+            voieToShow = (adminAssignedRaw !== null && String(adminAssignedRaw).trim() !== '') ? String(adminAssignedRaw) : null;
+          } else if (resolvedAdminPlatform !== null && resolvedAdminPlatform !== undefined && String(resolvedAdminPlatform).trim() !== '') {
+            voieToShow = String(resolvedAdminPlatform);
           } else {
-            origin = 'Origine inconnue';
+            const apiAssigned = (d.platform !== undefined && d.platform !== null) ? d.platform : (d.voie !== undefined && d.voie !== null ? d.voie : undefined);
+            if (apiAssigned !== undefined && apiAssigned !== null && String(apiAssigned).trim() !== '') {
+              voieToShow = String(apiAssigned);
+            } else {
+              // Aucun quai disponible -> ne pas afficher la colonne
+              voieToShow = null;
+            }
           }
-          const voie = d.voie || '';
           const typeLabel = d.type || 'TER';
           const number = d.number || d.train_number || '';
 
@@ -492,8 +530,9 @@ export default function AfficheurEVAArrivees(){
 
           const rowStateClass = d.cancelled ? 'cancelled' : (isDelayed ? 'delayed' : '');
 
+           const noVoieClass = voieToShow ? '' : 'no-voie';
            return (
-            <article className={`eva-row ${rowStateClass}`} key={d.id || i}>
+            <article className={`eva-row ${rowStateClass} ${noVoieClass}`} key={d.id || i}>
               <div className="timecol">
                 <div className="time-inner">
                   <div className={`time-h ${d.cancelled ? 'cancelled':''}`}>{timeDisplay}</div>
@@ -530,18 +569,17 @@ export default function AfficheurEVAArrivees(){
                 </div>
               </div>
 
-              <div className="voiecol">
-                <div className="voie-box-outer">
-                    {d.cancelled ? (
-                        <Image src="/file.svg" alt="Train supprimé" width={50} height={50} />
-                    ) : (
-                        <>
-                            <div className="voie-label">Voie</div>
-                            <div className="voie-letter">{voie || '—'}</div>
-                        </>
-                    )}
+              {/* Afficher la colonne voie uniquement si un quai est défini */}
+              {voieToShow ? (
+                <div className="voiecol">
+                  <div className="voie-box-outer">
+                      <>
+                          <div className="voie-label">Voie</div>
+                          <div className="voie-letter">{voieToShow}</div>
+                      </>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="greencol">
                 <div className="train-green">

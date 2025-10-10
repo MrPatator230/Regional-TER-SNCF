@@ -870,34 +870,19 @@ export { buildPdf };
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const ligneId = Number(searchParams.get('ligneId') || 0);
-  let orientation = (searchParams.get('orientation') || 'landscape').toLowerCase();
-  // Acceptation de synonymes FR pour l'orientation
-  const orientationMap = {
-    'paysage': 'landscape',
-    'portrait': 'portrait',
-    'landscape': 'landscape',
-    'portrait': 'portrait'
-  };
-  orientation = orientationMap[orientation] || 'landscape';
-  if (!['portrait', 'landscape'].includes(orientation)) orientation = 'landscape';
   const format = (searchParams.get('format') || 'json').toLowerCase();
-  const periodStart = searchParams.get('startDate') || '';
-  const periodEnd = searchParams.get('endDate') || '';
-  
-  const direction = (searchParams.get('direction') || 'forward').toLowerCase();
-  const stationsParam = (searchParams.get('stations') || '').trim();
-  let stationFilterIds = stationsParam 
-    ? stationsParam.split(',').map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0) 
-    : [];
-  
+  const dateParam = searchParams.get('date');
+
   if (!ligneId) {
     return NextResponse.json({ error: 'ligneId manquant' }, { status: 400 });
   }
-  
+
   const conn = await getSchedulesDb().getConnection();
-  
+  const today = dateParam || new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
   try {
-    const [rows] = await conn.execute(
+    let [rows] = await conn.execute(
       `SELECT s.id, s.ligne_id, s.train_number, s.train_type, s.rolling_stock,
               ds.name AS departure_station, as2.name AS arrival_station,
               TIME_FORMAT(s.departure_time,'%H:%i') AS departure_time,
@@ -908,183 +893,34 @@ export async function GET(request) {
          FROM schedules s
          JOIN stations ds ON ds.id = s.departure_station_id
          JOIN stations as2 ON as2.id = s.arrival_station_id
-        WHERE s.ligne_id=?
+        WHERE s.ligne_id = ? AND DATE(s.departure_time) = ?
         ORDER BY s.departure_time ASC, s.id ASC`,
-      [ligneId]
+      [ligneId, today]
     );
-    
+
+    // Si aucun horaire pour aujourd'hui, essayer pour demain
+    if (rows.length === 0) {
+      [rows] = await conn.execute(
+        `SELECT s.id, s.ligne_id, s.train_number, s.train_type, s.rolling_stock,
+                ds.name AS departure_station, as2.name AS arrival_station,
+                TIME_FORMAT(s.departure_time,'%H:%i') AS departure_time,
+                TIME_FORMAT(s.arrival_time,'%H:%i') AS arrival_time,
+                s.days_mask, s.flag_holidays, s.flag_sundays, s.flag_custom,
+                s.is_substitution AS isSubstitution,
+                s.stops_json AS stops_json
+           FROM schedules s
+           JOIN stations ds ON ds.id = s.departure_station_id
+           JOIN stations as2 ON as2.id = s.arrival_station_id
+          WHERE s.ligne_id = ? AND DATE(s.departure_time) = ?
+          ORDER BY s.departure_time ASC, s.id ASC`,
+        [ligneId, tomorrow]
+      );
+    }
+
     const schedules = rows.map(mapScheduleRow);
-
-    // Récupérer lineInfo de manière centralisée (depuis la table lignes ou fallback via schedules)
-    let lineInfo = await fetchLineInfo(ligneId, schedules);
-    // Si fetchLineInfo n'a pas retourné de lineInfo, construire un fallback depuis les schedules
-    if (!lineInfo && Array.isArray(schedules) && schedules.length > 0) {
-      const allSet = new Set();
-      const order = [];
-      let longestStops = [];
-      let longest = null;
-      schedules.forEach(sc => {
-        let stops = [];
-        try { stops = JSON.parse(sc.stops_json || '[]'); } catch (e) { stops = []; }
-        if (stops.length > longestStops.length) {
-          longestStops = stops;
-          longest = sc;
-        }
-      });
-      if (longest) {
-        const departStation = longest.departure_station || '';
-        const arrivalStation = longest.arrival_station || '';
-        if (departStation && !allSet.has(departStation)) { allSet.add(departStation); order.push(departStation); }
-        longestStops.forEach(stop => {
-          const stName = stop.station_name || stop.station;
-          if (stName && !allSet.has(stName)) { allSet.add(stName); order.push(stName); }
-        });
-        if (arrivalStation && !allSet.has(arrivalStation)) { allSet.add(arrivalStation); order.push(arrivalStation); }
-        lineInfo = {
-          id: ligneId,
-          departName: departStation || '',
-          arriveeName: arrivalStation || '',
-          stations: order.map((name, idx) => ({ id: idx + 1, name }))
-        };
-      }
-    }
-
-    // Construire la période
-    const period = {
-      start: periodStart || '',
-      end: periodEnd || '',
-      label: (periodStart || periodEnd) ? '' : 'Période non spécifiée'
-    };
-
-    // Si on souhaite un PDF, récupérer travaux, préparer tables et générer le PDF
-    if (format === 'pdf') {
-      // Perturbations travaux
-      let travaux = [];
-      try {
-        // Vérifier l'existence de la table perturbations avant de la requêter
-        const [tbl] = await conn.execute(
-          `SELECT COUNT(*) AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'perturbations'`
-        );
-        if (tbl && tbl[0] && Number(tbl[0].c) > 0) {
-          const [pertRows] = await conn.execute(
-            `SELECT id, type, titre, description, 
-                    DATE_FORMAT(date_debut,'%Y-%m-%dT%H:%i:%sZ') AS date_debut,
-                    DATE_FORMAT(date_fin,'%Y-%m-%dT%H:%i:%sZ') AS date_fin
-             FROM perturbations 
-             WHERE ligne_id=? AND type='travaux' 
-             ORDER BY date_debut DESC LIMIT 5`,
-            [ligneId]
-          );
-          travaux = pertRows;
-        } else {
-          travaux = [];
-        }
-      } catch (e) {
-        console.error('Erreur récupération perturbations (check failed):', e);
-        travaux = [];
-      }
-
-      // Filtrage stations (si param stations fourni)
-      let filteredForwardStations = lineInfo?.stations || [];
-      if (stationFilterIds.length) {
-        const idSet = new Set(stationFilterIds);
-        if (lineInfo?.stations?.length) {
-          idSet.add(lineInfo.stations[0].id);
-          idSet.add(lineInfo.stations[lineInfo.stations.length - 1].id);
-        }
-        const tmp = filteredForwardStations.filter(st => idSet.has(st.id));
-        if (tmp.length >= 2) filteredForwardStations = tmp;
-        else filteredForwardStations = lineInfo?.stations || filteredForwardStations;
-      }
-
-      const forwardLineInfo = lineInfo ? { ...lineInfo, stations: filteredForwardStations } : null;
-
-      // Utiliser tous les schedules (pas de sens inverse calculé ici)
-      const forwardSchedules = schedules;
-      // Génération simple des schedules en sens inverse :
-      // on inverse l'ordre des arrêts et on échange départ/arrivée + les heures correspondantes.
-      const reverseSchedules = forwardSchedules.map(sc => {
-        // Clone léger
-        const rev = { ...sc };
-        // Swap stations
-        rev.departure_station = sc.arrival_station;
-        rev.arrival_station = sc.departure_station;
-        // Swap times
-        rev.departure_time = sc.arrival_time || sc.departure_time;
-        rev.arrival_time = sc.departure_time || sc.arrival_time;
-
-        // Inverser les stops
-        try {
-          const originalStops = JSON.parse(sc.stops_json || '[]');
-          const reversedStops = originalStops.slice().reverse().map(stop => {
-            // swap arrival/departure keys and times if present
-            const newStop = { ...stop };
-            // swap field names that may exist (station_name/station preserved)
-            const arr = stop.arrival || stop.arrival_time || stop.arrivalTime || null;
-            const dep = stop.departure || stop.departure_time || stop.departureTime || null;
-            if (arr !== null || dep !== null) {
-              if (arr !== undefined) newStop.departure = arr;
-              if (dep !== undefined) newStop.arrival = dep;
-              // Also handle time-specific fields
-              if (stop.arrival_time !== undefined) newStop.departure_time = stop.arrival_time;
-              if (stop.departure_time !== undefined) newStop.arrival_time = stop.departure_time;
-            }
-            return newStop;
-          });
-          rev.stops_json = JSON.stringify(reversedStops);
-        } catch (e) {
-          rev.stops_json = sc.stops_json;
-        }
-
-        return rev;
-      });
-
-      let reverseLineInfo = null;
-      if (lineInfo) {
-        let revStations = [...lineInfo.stations].reverse();
-        if (stationFilterIds.length) {
-          const idSet = new Set(stationFilterIds);
-          idSet.add(lineInfo.stations[0].id);
-          idSet.add(lineInfo.stations[lineInfo.stations.length - 1].id);
-          const tmp = revStations.filter(st => idSet.has(st.id));
-          if (tmp.length >= 2) revStations = tmp;
-        }
-        reverseLineInfo = {
-          ...lineInfo,
-          stations: revStations,
-          departName: lineInfo.arriveeName,
-          arriveeName: lineInfo.departName
-        };
-      }
-
-      const tables = [];
-      if (direction === 'forward' || direction === 'both') tables.push({ lineInfo: forwardLineInfo, schedules: forwardSchedules, label: 'Aller' });
-      if ((direction === 'reverse' || direction === 'both') && reverseSchedules.length) tables.push({ lineInfo: reverseLineInfo, schedules: reverseSchedules, label: 'Retour' });
-
-      const pdfBytes = await buildPdf({ ligneId, orientation, tables, travaux, period });
-
-      return new Response(pdfBytes, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename=fiche-horaires-ligne-${ligneId}.pdf`,
-          'Cache-Control': 'no-store'
-        }
-      });
-    }
-
-    // Sinon format JSON: retourner les schedules et la lineInfo (avec stations construites)
-    return NextResponse.json({
-      ligneId,
-      orientation,
-      generatedAt: new Date().toISOString(),
-      count: schedules.length,
-      schedules,
-      lineInfo
-    });
-  } catch (e) {
-    console.error('GET /api/fiches-horaires error', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return NextResponse.json({ schedules });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   } finally {
     conn.release();
   }

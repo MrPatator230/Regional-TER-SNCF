@@ -100,25 +100,41 @@ export default function AfficheurClassiqueDeparts(){
     return ()=>{ abort=true; clearInterval(id); };
   },[gare]);
 
-  // utilitaires (normalisation / extraction de label / extraction d'heure)
-  const normalizeLabel = (s)=>{
-    if(!s) return '';
-    try{
-      let t = String(s).normalize('NFD').replace(/\p{Diacritic}/gu,'');
-      t = t.replace(/[^\p{L}\p{N}]+/gu,' ').trim().toLowerCase();
-      return t.replace(/\s+/g,' ');
-    }catch(_){
-      let t = String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-      t = t.replace(/[^A-Za-z0-9\u00C0-\u017F]+/g,' ').trim().toLowerCase();
-      return t.replace(/\s+/g,' ');
+  // --- Synchronisation des attributions centralisées (API /api/quais)
+  const [adminPlatformsMap, setAdminPlatformsMap] = useState({});
+  useEffect(()=>{
+    if(!gare) return;
+    let abort = false;
+    async function loadAdminPlatforms(){
+      try{
+        const url = `/api/quais?stationName=${encodeURIComponent(gare)}&limit=2000`;
+        const r = await fetch(url, { cache: 'no-store' });
+        if(!r.ok){ if(!abort) setAdminPlatformsMap({}); return; }
+        const j = await r.json().catch(()=>null);
+        if(abort) return;
+        const map = {};
+        if(j && Array.isArray(j.items)){
+          j.items.forEach(it => {
+            if(!it) return;
+            // normaliser schedule_id en string
+            const sid = it.schedule_id !== undefined && it.schedule_id !== null ? String(it.schedule_id) : null;
+            if(sid) map[sid] = (it.platform !== undefined && it.platform !== null) ? it.platform : '';
+          });
+        }
+        setAdminPlatformsMap(map);
+      }catch(_){ if(!abort) setAdminPlatformsMap({}); }
     }
-  };
+    loadAdminPlatforms();
+    const tid = setInterval(loadAdminPlatforms, 30000);
+    return ()=>{ abort = true; clearInterval(tid); };
+  },[gare]);
 
-  const getStopLabel = (s)=>{
+  // extraire un label lisible pour un stop/objet gare
+  const getStopLabel = (s) => {
     if(!s) return '';
     if(typeof s === 'string'){
       let label = s.trim();
-      label = label.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+      label = label.replace(/\s*\(.*?\)\s*/g,' ').trim();
       const parts = label.split(/\s+/);
       if(parts.length >= 2){
         const secondPart = parts.slice(1).join(' ');
@@ -511,6 +527,7 @@ export default function AfficheurClassiqueDeparts(){
               return lbl === normGare || lbl.startsWith(normGare) || normGare.startsWith(lbl);
             });
             const currentStop = currentIdx >= 0 ? stops[currentIdx] : (stops.length ? stops[0] : null);
+            // (ancien fallback local supprimé) on utilisera `platformToShow2` calculé ci-dessous
 
             let stationTime = '';
             if (currentStop) {
@@ -538,21 +555,19 @@ export default function AfficheurClassiqueDeparts(){
             let delay = (typeof d.delay_min === 'number' && d.delay_min > 0) ? d.delay_min : (d.delay || 0);
 
             // Modification de la logique d'affichage des quais
-            // Prefer platform provided directly by the API (server-side includes admin assignment as `platform` when present).
-            // Also accept `d.voie` when present from the server. Treat null/empty string as explicit "(Aucun)".
-            const apiAssigned = (d.platform !== undefined && d.platform !== null) ? d.platform : (d.voie !== undefined && d.voie !== null ? d.voie : undefined);
-            let platformToShow = null;
-            if (apiAssigned !== undefined) {
-              const val = apiAssigned === null ? '' : String(apiAssigned);
-              platformToShow = val.trim() !== '' ? apiAssigned : '—'; // Afficher "—" au lieu de masquer la box
+            // Priorité : attribution admin (via API/DB) -> propriété `platform`/`voie` fournie par l'API -> fallback '—'
+            const resolvedAdminPlatform = platformForStation(d, gare);
+            let platformToShow2 = null;
+            if (resolvedAdminPlatform !== null && resolvedAdminPlatform !== undefined && String(resolvedAdminPlatform).trim() !== '') {
+              platformToShow2 = resolvedAdminPlatform;
             } else {
-              // No explicit platform from API: try to resolve from admin assignment heuristics and fallbacks
-              const resolvedAdminPlatform = platformForStation(d, gare);
-              if (resolvedAdminPlatform !== null && resolvedAdminPlatform !== undefined) {
-                platformToShow = String(resolvedAdminPlatform).trim() !== '' ? resolvedAdminPlatform : '—';
+              const apiAssigned = (d.platform !== undefined && d.platform !== null) ? d.platform : (d.voie !== undefined && d.voie !== null ? d.voie : undefined);
+              if (apiAssigned !== undefined) {
+                const val = apiAssigned === null ? '' : String(apiAssigned);
+                platformToShow2 = val.trim() !== '' ? apiAssigned : '';
               } else {
                 const fallbackPlatform = d.voie || d.platform || d.platform_code || d.track;
-                platformToShow = fallbackPlatform || '—'; // Toujours afficher une box, même vide avec "—"
+                platformToShow2 = fallbackPlatform || '—';
               }
             }
 
@@ -576,6 +591,7 @@ export default function AfficheurClassiqueDeparts(){
                 }
                 return false;
               });
+
               if (match) {
                 const m = match;
                 const mStatus = String(m.status || m.type || '').toLowerCase();
@@ -631,7 +647,7 @@ export default function AfficheurClassiqueDeparts(){
                 </div>
 
                 {/* Modifier le rendu pour toujours afficher la box de quai */}
-                <div className="cell voie"><div className="voie-box">{platformToShow}</div></div>
+                <div className="cell voie"><div className="voie-box">{platformToShow2}</div></div>
 
               </div>
             );

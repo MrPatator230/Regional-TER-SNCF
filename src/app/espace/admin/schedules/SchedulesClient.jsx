@@ -274,6 +274,51 @@ function DaysForm({state,dispatch}){
   </div>;
 }
 
+// Ajout du composant VariantStopsEditor — utilisé pour éditer les arrêts lors d'une perturbation (modification)
+function VariantStopsEditor({stops, setStops, stations=[]}){
+  const used = new Set(stops.map(s=> s.station).filter(Boolean));
+  function update(i,patch){ setStops(prev => prev.map((s,idx)=> idx===i? {...s,...patch} : s)); }
+  function add(){ setStops(prev => [...prev, {station:'', arrival:'', departure:'', removed:false}]); }
+  function remove(i){ setStops(prev => prev.filter((_,idx)=> idx!==i)); }
+  function moveUp(i){ if(i<=0) return; setStops(prev => { const arr = prev.slice(); [arr[i-1],arr[i]] = [arr[i],arr[i-1]]; return arr; }); }
+  function moveDown(i){ if(i>=stops.length-1) return; setStops(prev => { const arr = prev.slice(); [arr[i+1],arr[i]] = [arr[i],arr[i+1]]; return arr; }); }
+  function toggleRemoved(i){ setStops(prev => prev.map((s,idx)=> idx===i? {...s, removed: !s.removed} : s)); }
+  function selectableFor(stop){ return (stations||[]).filter(st => !used.has(st) || st===stop.station); }
+
+  return <div className="variant-stops-editor">
+    <h4>Arrêts (modification)</h4>
+    <div className="stops-list">
+      {stops.map((s,i)=> (
+        <div key={i} className="stop-row">
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',width:'100%'}}>
+            <div style={{flex:'1 1 220px'}}>
+              <WcsSelect value={s.station} onChange={v=> update(i,{station:v})} aria-label={`Gare arrêt ${i+1}`}>
+                <wcs-select-option value="">(Gare)</wcs-select-option>
+                {selectableFor(s).map(g=> <wcs-select-option key={g} value={g}>{g}</wcs-select-option>)}
+              </WcsSelect>
+            </div>
+            <input type="time" value={s.arrival||''} onChange={e=> update(i,{arrival:e.target.value})} style={{width:120}} aria-label={`Arrivée arrêt ${i+1}`} />
+            <input type="time" value={s.departure||''} onChange={e=> update(i,{departure:e.target.value})} style={{width:120}} aria-label={`Départ arrêt ${i+1}`} />
+            <label style={{display:'flex',alignItems:'center',gap:6}}><input type="checkbox" checked={!!s.removed} onChange={()=> toggleRemoved(i)} /> Supprimer</label>
+            <div style={{display:'flex',gap:6}}>
+              <wcs-button shape="small" mode="stroked" onClick={()=> moveUp(i)} disabled={i===0}>▲</wcs-button>
+              <wcs-button shape="small" mode="stroked" onClick={()=> moveDown(i)} disabled={i===stops.length-1}>▼</wcs-button>
+              <wcs-button shape="small" mode="stroked" icon="delete" onClick={()=> remove(i)}>Suppr</wcs-button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {stops.length===0 && <p className="hint">Aucun arrêt.</p>}
+      <div style={{marginTop:8}}>
+        <wcs-button mode="stroked" icon="add" onClick={add} disabled={stops.length>=(stations||[]).length}>Ajouter un arrêt</wcs-button>
+      </div>
+    </div>
+
+    <style jsx>{` .stop-row{border:1px solid #e6e9ef;padding:8px;border-radius:6px;margin-bottom:8px;background:#fff} `}</style>
+  </div>;
+}
+
 export default function SchedulesClient(){
   const { data:lines } = useFetchOnce('/api/lignes', j=> j.lignes||[]);
   const { data:stationObjs } = useFetchOnce('/api/stations', j=> (j.stations||[]));
@@ -567,7 +612,7 @@ export default function SchedulesClient(){
                   <div><label>Arrivée</label><WcsInput value={variantGeneral.arrivalStation} onChange={v=> setVariantGeneral(g=>({...g, arrivalStation:v}))} /></div>
                   <div><label>H. arrivée</label><input type="time" value={variantGeneral.arrivalTime} onChange={e=> setVariantGeneral(g=>({...g, arrivalTime:e.target.value}))} /></div>
                 </div>
-                <VariantStopsEditor stops={variantStops} setStops={setVariantStops} />
+                <VariantStopsEditor stops={variantStops} setStops={setVariantStops} stations={stations} />
               </div>
             </wcs-tab>
           </wcs-tabs>}

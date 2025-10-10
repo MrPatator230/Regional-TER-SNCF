@@ -333,6 +333,7 @@ export async function PUT(request){
       [ligneId, g.trainNumber||null, g.trainType||null, body.rollingStock||null, depId, arrId, depT, arrT, daysNormalized.mask, daysNormalized.list, days.holidays?1:0, days.sundays?1:0, days.custom?1:0, body.isSubstitution ? 1 : 0, id]
     );
 
+    // Enregistrement strict de toutes les gares renseignées dans le tab "Arrêts" dans DESSERVIES (stops_json)
     await conn.execute('DELETE FROM schedule_stops WHERE schedule_id=?',[id]);
     if(stops.length){
       const values=[]; let order=0;

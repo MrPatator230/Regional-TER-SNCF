@@ -127,17 +127,18 @@ export async function GET(req){
     const list = rows.map(r => {
       const stops = parseStopsJson(r.stops_json);
       let horaire_afficheur = null;
+      // Ne conserver que les horaires d'ARRIVÉE pour cet afficheur
       if (r.arrival_station === st.name) {
-        // Terminus
+        // Terminus -> heure d'arrivée
         horaire_afficheur = r.arrival_time;
-      } else if (r.departure_station === st.name) {
-        // Origine
-        horaire_afficheur = r.departure_time;
       } else {
-        // Desservie
+        // Desservie : n'utiliser que l'heure d'ARRIVÉE à cette gare
         const stop = stops.find(s => s.station_name === st.name);
-        horaire_afficheur = stop?.arrival_time || stop?.departure_time || null;
+        horaire_afficheur = stop?.arrival_time || null;
       }
+
+      // Si pas d'heure d'arrivée disponible pour cette gare, exclure
+      if(!horaire_afficheur) return null;
 
       // Logique améliorée pour l'attribution des quais dans les arrivées
       const adminPlatform = assignedMap[r.id];
@@ -168,7 +169,7 @@ export async function GET(req){
         platform: platformToShow,
         status: 'A L\'HEURE'
       };
-    }).filter(r => r.horaire_afficheur).slice(0,10);
+    }).filter(r => r && r.horaire_afficheur).slice(0,10);
     return NextResponse.json({ gare: gareName, arrivals: list });
   } catch(e){
     console.error('GET /api/afficheurs/classiques/arrivees', e);

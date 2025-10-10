@@ -279,14 +279,14 @@ export async function GET(req){
       }) || null;
       let rawPass = null;
       if (r.departure_station === st.name) {
-        // Origine
+        // Origine -> utiliser l'heure de départ
         rawPass = r.departure_time;
-      } else if (stopForStation) {
-        // Desservie : priorité à l'heure de départ à la gare, sinon arrivée
-        rawPass = stopForStation.departure_time || stopForStation.arrival_time || null;
-      } else if (r.arrival_station === st.name) {
-        // Terminus
-        rawPass = r.arrival_time;
+      } else if (stopForStation && stopForStation.departure_time) {
+        // Desservie : n'utiliser que l'heure de DÉPART à cette gare
+        rawPass = stopForStation.departure_time;
+      } else {
+        // Si la gare est terminus mais n'a pas d'heure de départ, on exclut (ne pas utiliser l'arrivée)
+        rawPass = null;
       }
       const passTime = normalizeTimeHM(rawPass);
       if(debug){
@@ -310,9 +310,13 @@ export async function GET(req){
          const stops = parseStopsJson(r.stops_json || '[]');
          const stopForStation = stops.find(s => {
            if(!s || !s.station_name) return false;
-           return s.station_name === st.name || s.station_name.startsWith(st.name) || st.name.startsenteurs(s.station_name) || s.station_name.includes(st.name) || st.name.includes(s.station_name);
+           return normalize(s.station_name) === gareNorm || s.station_name === st.name || s.station_name.startsWith(st.name) || st.name.startsWith(s.station_name) || s.station_name.includes(st.name) || st.name.includes(s.station_name);
          }) || null;
-         const rawPass = stopForStation?.departure_time || stopForStation?.arrival_time || r.departure_time || null;
+         // Pour le lendemain, ne garder que les heures de DÉPART à la gare (origine ou stop avec departure_time)
+         let rawPass = null;
+         if (r.departure_station === st.name) rawPass = r.departure_time;
+         else if (stopForStation && stopForStation.departure_time) rawPass = stopForStation.departure_time;
+         else rawPass = null;
          const passTime = normalizeTimeHM(rawPass);
          return { raw: r, stops, passTime };
        });
@@ -324,18 +328,31 @@ export async function GET(req){
     // Amélioration de la logique de récupération des quais assignés
     const assignedMap = {}; // schedule_id -> platform
     if(scheduleIds.length > 0){
-      // Prioriser la récupération directe depuis la base de données pour garantir la cohérence
+      // 1) Essayer d'abord de récupérer les attributions centralisées via l'API admin `/api/quais`
       try{
-        const placeholders = scheduleIds.map(()=>'?').join(',');
-        const sql = `SELECT schedule_id, platform FROM schedule_platforms WHERE station_id = ? AND schedule_id IN (${placeholders})`;
-        const [platRows] = await scheduleQuery(sql, [st.id, ...scheduleIds]);
-        if(Array.isArray(platRows)){
-          platRows.forEach(pr => {
-            assignedMap[pr.schedule_id] = pr.platform || null;
-          });
+        const origin = new URL(req.url).origin;
+        const url = `${origin}/api/quais?stationName=${encodeURIComponent(st.name)}&limit=2000`;
+        const r = await fetch(url, { cache: 'no-store' });
+        const j = await r.json().catch(()=>null);
+        if(r.ok && j && Array.isArray(j.items)){
+          j.items.forEach(it => { if(it && it.schedule_id) assignedMap[it.schedule_id] = it.platform ?? ''; });
         }
-      }catch(e){
-        console.warn('Erreur récupération quais assignés:', e);
+      }catch(_){ /* ignore fetch errors */ }
+
+      // 2) Si l'API n'a rien retourné, fallback sur la table `schedule_platforms` pour cohérence
+      if(Object.keys(assignedMap).length === 0){
+        try{
+          const placeholders = scheduleIds.map(()=>'?').join(',');
+          const sql = `SELECT schedule_id, platform FROM schedule_platforms WHERE station_id = ? AND schedule_id IN (${placeholders})`;
+          const platRows = await scheduleQuery(sql, [st.id, ...scheduleIds]);
+          if(Array.isArray(platRows)){
+            platRows.forEach(pr => {
+              assignedMap[pr.schedule_id] = pr.platform || null;
+            });
+          }
+        }catch(e){
+          console.warn('Erreur récupération quais assignés:', e);
+        }
       }
     }
 

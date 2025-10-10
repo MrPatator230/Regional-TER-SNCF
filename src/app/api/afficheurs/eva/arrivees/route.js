@@ -163,16 +163,17 @@ export async function GET(req){
             const stops = parseStopsJson(r.stops_json);
             let horaire_afficheur = null;
             if (r.arrival_station === st.name) {
-                // Terminus
+                // Terminus -> heure d'arrivée
                 horaire_afficheur = r.arrival_time;
-            } else if (r.departure_station === st.name) {
-                // Origine
-                horaire_afficheur = r.departure_time;
             } else {
-                // Desservie
+                // Desservie -> n'utiliser que l'heure d'ARRIVÉE au niveau du stop
                 const stop = stops.find(s => s.station_name === st.name);
-                horaire_afficheur = stop?.arrival_time || stop?.departure_time || null;
+                horaire_afficheur = stop?.arrival_time || null;
             }
+
+            // Exclure si pas d'heure d'arrivée pour cette gare
+            if (!horaire_afficheur) return null;
+
             const voie = (parseInt(r.train_number,10)||0)%2? '1':'2';
             const trainType = r.train_type || 'TER';
             const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg';
@@ -197,7 +198,7 @@ export async function GET(req){
                 days_mask: r.days_mask === undefined ? null : Number(r.days_mask),
                 service_days: serviceDays
             };
-        }).filter(r => r.horaire_afficheur).slice(0,10);
+        }).filter(Boolean).slice(0,10);
         return NextResponse.json({ gare: gareName, arrivals: list });
     } catch(e){
         console.error('GET /api/afficheurs/classiques/arrivees', e);
