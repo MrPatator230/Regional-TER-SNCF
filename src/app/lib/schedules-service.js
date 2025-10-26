@@ -305,6 +305,9 @@ export async function listSchedules(includeStops = false, ligneId = null) {
 }
 
 export async function createSchedule(payload) {
+    // Sécuriser payload pour éviter les lectures sur undefined
+    payload = payload || {};
+
     const errs = validateScheduleInput(payload);
     if (errs.length) return { error: errs.join(', ') };
     const conn = await getSchedulesDb().getConnection();
@@ -372,6 +375,9 @@ export async function createSchedule(payload) {
 }
 
 export async function updateSchedule(id, payload) {
+    // Sécuriser payload
+    payload = payload || {};
+
     if (!id) return { error: 'id requis' };
     const errs = validateScheduleInput(payload);
     if (errs.length) return { error: errs.join(', ') };
@@ -410,24 +416,27 @@ export async function updateSchedule(id, payload) {
         const depId = nameToId[g.departureStation];
         const arrId = nameToId[g.arrivalStation];
         const daysCols = buildDaysColumns(daysObj);
-        const updSql = `UPDATE schedules SET ligne_id=?, train_number=?, train_type=?, rolling_stock=?, departure_station_id=?, arrival_station_id=?, departure_time=?, arrival_time=?, days_mask=?, days_mask_list=?, flag_holidays=?, flag_sundays=?, flag_custom=? WHERE id=?`;
+        const updateSql = `UPDATE schedules SET ligne_id=?, train_number=?, train_type=?, rolling_stock=?, departure_station_id=?, arrival_station_id=?, departure_time=?, arrival_time=?, days_mask=?, days_mask_list=?, flag_holidays=?, flag_sundays=?, flag_custom=? WHERE id=?`;
         const params = [g.ligneId ? Number(g.ligneId) : null, g.trainNumber || null, g.trainType || null, g.rollingStock || payload.rollingStock || null, depId, arrId, cleanTime(g.departureTime), cleanTime(g.arrivalTime), daysCols.days_mask, daysCols.days_mask_list, daysCols.flag_holidays, daysCols.flag_sundays, (Array.isArray(customDates) && customDates.length ? 1 : daysCols.flag_custom), id];
-        const [r] = await conn.execute(updSql, params);
-        if (!r.affectedRows) throw new Error('Aucune ligne mise à jour');
-        await conn.execute('DELETE FROM schedule_custom_include WHERE schedule_id=?', [id]);
-        if (Array.isArray(customDates) && customDates.length) {
-            const values = customDates.map(() => '(?,?)').join(',');
-            const vals = [];
-            customDates.forEach(d => vals.push(id, d));
-            await conn.execute(`INSERT INTO schedule_custom_include (schedule_id,date) VALUES ${values}`, vals);
+        await conn.execute(updateSql, params);
+        if (Array.isArray(customDates)) {
+            await conn.execute('DELETE FROM schedule_custom_include WHERE schedule_id=?', [id]);
+            if (customDates.length) {
+                const values = customDates.map(() => '(?,?)').join(',');
+                const vals=[]; customDates.forEach(d => vals.push(id,d));
+                await conn.execute(`INSERT INTO schedule_custom_include (schedule_id,date) VALUES ${values}`, vals);
+            }
         }
-        await conn.query('SET SESSION group_concat_max_len = 1000000');
-        await conn.query('CALL set_schedule_stops(?, ?)', [id, buildStopsJsonForProc(stopsNorm, nameToId)]);
+        if (stopsNorm.length) {
+            const stopsJson = buildStopsJsonForProc(stopsNorm, nameToId);
+            await conn.query('SET SESSION group_concat_max_len = 1000000');
+            await conn.query('CALL set_schedule_stops(?, ?)', [id, stopsJson]);
+        }
         await conn.commit();
         const sched = await fetchSchedule(id);
         return { schedule: sched };
     } catch (e) {
-        try { await conn.rollback(); } catch { }
+        try { await conn.rollback(); } catch (er) { }
         return { error: e.message || String(e) };
     } finally {
         try { conn.release(); } catch { }

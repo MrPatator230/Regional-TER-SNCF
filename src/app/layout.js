@@ -7,7 +7,6 @@ import "@sncf/bootstrap-sncf.metier/dist/bootstrap-sncf.min.css";
 import React from "react";
 import WcsSetup from "./wcs-setup";
 import FooterGlobal from "./components/FooterGlobal.jsx";
-import {achemineFont} from "@/fonts/achemine";
 
 export default function RootLayout({ children }) {
   // Détection du thème côté serveur (valeur par défaut)

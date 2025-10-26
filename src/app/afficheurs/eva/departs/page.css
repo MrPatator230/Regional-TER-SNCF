@@ -117,7 +117,30 @@
 .eva-row.delayed .time-h, .eva-row.delayed .dest-origin, .eva-row.delayed .dest-main, .eva-row.delayed .route-label, .eva-row.delayed .via-line, .eva-row.delayed .voie-label, .eva-row.delayed .voie-letter, .eva-row.delayed .train-type, .eva-row.delayed .train-number, .eva-row.delayed .time-pill, .eva-row.delayed .dest-badge { text-decoration: none !important; }
 
 .destcol { display: flex; flex-direction: column; justify-content: flex-start; padding: 12px 18px; height: 100%; }
-.dest-origin { font-size: 70px; font-weight: 900; color: var(--navy-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "Achemine", "Avenir", sans-serif; line-height: 1; margin-bottom: 2px; }
+
+.dest-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
+.dest-origin { font-size: 70px; font-weight: 900; color: var(--navy-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "Achemine", "Avenir", sans-serif; line-height: 1; margin-bottom: 0; }
+
+.delay-cause {
+  background: var(--accent-orange);
+  color: var(--navy-ink);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .dest-main{ height: auto; font-size: 18px; font-weight: 700; color: var(--navy-ink); display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
 .dest-badge{margin-left:12px;padding: 4px 8px;border-radius:6px;font-weight:700;font-size:14px}
 .dest-badge.orange { background: var(--accent-orange); color: var(--navy-ink); }
@@ -160,3 +183,5 @@
   .eva-title .main{ font-size:42px }
   .translations{ margin-left:0; font-size:20px }
 }
+
+

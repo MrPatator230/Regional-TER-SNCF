@@ -78,7 +78,8 @@ function GeneralForm({state,dispatch,lines,stations}){ const g=state.general; co
     </div>
     <div>
       <label>Type train</label>
-      <WcsInput value={g.trainType} onChange={v=> dispatch({type:'SET_GENERAL',payload:{trainType:v}})} />
+      {/* Autocomplete texte pour le type de train */}
+      <AutocompleteTrainType value={g.trainType} onChange={v=> dispatch({type:'SET_GENERAL',payload:{trainType:v}})} />
     </div>
   </div>
 </div>; }
@@ -137,6 +138,8 @@ function RollingStockForm({state,dispatch}){
 function StopsForm({state,dispatch,stations}){
   const stops=state.stops;
   const used=new Set(stops.map(s=>s.station).filter(Boolean));
+  const addButtonRef = useRef(null);
+
   function update(i,patch){ dispatch({type:'SET_STOPS',payload: normalizeSequential(stops.map((s,idx)=> idx===i? {...s,...patch}: s))}); }
   function add(){ dispatch({type:'SET_STOPS',payload:[...stops,{station:'',arrival:'',departure:''}]}); }
   function remove(i){ dispatch({type:'SET_STOPS',payload: stops.filter((_,idx)=> idx!==i)}); }
@@ -144,11 +147,20 @@ function StopsForm({state,dispatch,stations}){
   function moveDown(i){ if(i>=stops.length-1) return; const arr = stops.slice(); [arr[i+1],arr[i]] = [arr[i],arr[i+1]]; dispatch({type:'SET_STOPS',payload: normalizeSequential(arr)}); }
   function selectableFor(stop){ return stations.filter(st => !used.has(st) || st===stop.station); }
 
+  // Gestion du clic sur le bouton "Ajouter un arrêt"
+  useEffect(() => {
+    const btn = addButtonRef.current;
+    if (!btn) return;
+    const handleClick = () => add();
+    btn.addEventListener('click', handleClick);
+    return () => btn.removeEventListener('click', handleClick);
+  }, [stops]);
+
   return <div className="panel stops-panel">
     <div className="stops-header">
       <h3>Arrêts intermédiaires</h3>
       <div className="stops-actions">
-        <wcs-button mode="stroked" icon="add" onClick={add} disabled={stops.length>=stations.length}>Ajouter un arrêt</wcs-button>
+        <wcs-button ref={addButtonRef} mode="stroked" icon="add" disabled={stops.length>=stations.length}>Ajouter un arrêt</wcs-button>
         <span className="stops-count muted">{stops.length} / {stations.length}</span>
       </div>
     </div>
@@ -342,6 +354,9 @@ export default function SchedulesClient(){
   const [formError,setFormError]=useState('');
   const [modalTab,setModalTab]=useState('general');
 
+  // Ref pour mémoriser la dernière ligne traitée (évite de recalculer les arrêts à chaque modification)
+  const lastProcessedLineRef = useRef(null);
+
   const [pertDate,setPertDate]=useState(()=> new Date().toISOString().slice(0,10));
   const [pertLoading,setPertLoading]=useState(false);
   const [pertError,setPertError]=useState('');
@@ -350,6 +365,7 @@ export default function SchedulesClient(){
   async function loadPerturbations(){ setPertLoading(true); setPertError(''); try { const r=await fetch('/api/schedules/daily-perturbations?date='+encodeURIComponent(pertDate), { credentials:'include' }); const j=await r.json().catch(()=>null); if(!r.ok) throw new Error(j?.error||'Erreur chargement'); setPertItems(Array.isArray(j?.items)? j.items: []); } catch(e){ setPertError(e.message); setPertItems([]); } finally { setPertLoading(false);} }
   useEffect(()=>{ if(mainTab==='perturb-list'){ loadPerturbations(); } },[mainTab, pertDate]);
   const filteredPert = useMemo(()=>{ const q=pertSearch.trim().toLowerCase(); if(!q) return pertItems; return pertItems.filter(it=> [it?.schedule?.train_number, it?.schedule?.departure_station, it?.schedule?.arrival_station, it?.type, it?.delay_from_station, it?.mod_departure_station, it?.mod_arrival_station].some(v=> String(v||'').toLowerCase().includes(q))); },[pertItems,pertSearch]);
+
   async function deletePerturbation(it){
     if(!confirm('Supprimer cette perturbation ?')) return;
     const dateOnly = String(it.date||'').slice(0,10);
@@ -364,49 +380,101 @@ export default function SchedulesClient(){
   }
 
   useEffect(()=>{
-    // Conditions: modal ouvert, ligne choisie, mode création (pas original)
+    // Conditions: modal ouvert, ligne choisie
     if(!showModal) return;
     if(!formState.general.ligneId) return;
-    if(formState.original) return;
+
+    // Ne remplir automatiquement que si la ligne a changé
+    const currentLineKey = `${formState.general.ligneId}-${formState.general.departureStation}-${formState.general.arrivalStation}`;
+    if(lastProcessedLineRef.current === currentLineKey) {
+      return; // La ligne n'a pas changé, ne rien faire
+    }
+
     const l=lines.find(x=> String(x.id)===String(formState.general.ligneId));
     if(!l) return;
+
+    // Construire la liste complète des gares de la ligne
     const seqIds=[l.depart_station_id, ...(Array.isArray(l.desservies)? l.desservies:[]), l.arrivee_station_id];
     const nameById={};
     stationObjs.forEach(o=> { nameById[o.id]=o.name; });
     const seqNames=seqIds.map(id=> nameById[id]).filter(Boolean);
+
     const dep=formState.general.departureStation||l.depart_name;
     const arr=formState.general.arrivalStation||l.arrivee_name;
+
     // Si départ/arrivée non posés encore on force leur valeur par défaut
     if(!formState.general.departureStation || !formState.general.arrivalStation){
       dispatch({type:'SET_GENERAL',payload:{ departureStation:dep, arrivalStation:arr }});
     }
+
     const depIdx=seqNames.indexOf(dep);
     const arrIdx=seqNames.indexOf(arr);
+
     if(depIdx>-1 && arrIdx>-1 && depIdx!==arrIdx){
+      // Extraire toutes les gares entre le départ et l'arrivée
       let inter;
-      if(depIdx < arrIdx) inter = seqNames.slice(depIdx+1, arrIdx); else inter = seqNames.slice(arrIdx+1, depIdx).reverse();
-      inter = inter.filter(n => n!==dep && n!==arr);
-      // Filtrage transport 'train'
-      const transportsByName = {};
-      stationObjs.forEach(o=> { transportsByName[o.name]=Array.isArray(o.transports)? o.transports.map(t=> String(t).toLowerCase()): []; });
-      inter = inter.filter(n => (transportsByName[n]||[]).includes('train'));
-      // Comparer avec stops actuels (séquence des noms)
-      const currentSeq = formState.stops.map(s=> s.station);
-      const equal = currentSeq.length===inter.length && currentSeq.every((v,i)=> v===inter[i]);
-      if(!equal){
+      if(depIdx < arrIdx) {
+        inter = seqNames.slice(depIdx+1, arrIdx);
+      } else {
+        inter = seqNames.slice(arrIdx+1, depIdx).reverse();
+      }
+
+      // Remplir automatiquement uniquement en mode création ou si la liste est vide
+      if(!formState.original || formState.stops.length === 0){
         dispatch({type:'SET_STOPS',payload: inter.map(n=>({station:n,arrival:'',departure:''})) });
+        // Marquer cette ligne comme traitée
+        lastProcessedLineRef.current = currentLineKey;
       }
     } else {
-      // Si incohérence (indices introuvables) et on a des stops pré-remplis, on les efface
-      if(formState.stops.length){
+      // Si les indices sont invalides et on est en mode création avec des stops, on les efface
+      if(formState.stops.length && !formState.original){
         dispatch({type:'SET_STOPS',payload: []});
       }
     }
-  },[showModal, formState.general.ligneId, formState.general.departureStation, formState.general.arrivalStation, formState.original, lines, stationObjs, formState.stops]);
+  },[showModal, formState.general.ligneId, formState.general.departureStation, formState.general.arrivalStation, formState.original, lines, stationObjs]);
 
-  function openCreate(){ dispatch({type:'RESET'}); setShowModal(true); setFormError(''); setModalTab('general'); }
-  async function openEdit(id){ try { const r=await fetch('/api/schedules?id='+id+'&withStops=1', { credentials:'include' }); if(!r.ok) throw new Error('Lecture impossible'); const s=await r.json(); const dto={ id:s.id, ligneId:s.ligne_id||s.ligneId, departureStation:s.departure_station||s.departureStation, arrivalStation:s.arrival_station||s.arrivalStation, departureTime:(s.departure_time||s.departureTime||'').slice(0,5), arrivalTime:(s.arrival_time||s.arrivalTime||'').slice(0,5), trainNumber:s.train_number||s.trainNumber||'', trainType:s.train_type||s.trainType||'', rollingStock:s.rolling_stock||s.rollingStock||'', days:s.days||s.days, customDates:s.custom_dates||s.customDates||[], stops: (Array.isArray(s.stops)? s.stops:[]).map(st=> ({ station: st.station_name||st.station, arrival:(st.arrival_time||st.arrival||'').slice(0,5), departure:(st.departure_time||st.departure||'').slice(0,5) })), isSubstitution: !!(s.isSubstitution ?? s.is_substitution) };
-    dispatch({type:'LOAD_FROM_DTO', payload:{ ...dto, days: dto.days }}); setShowModal(true); setFormError(''); setModalTab('general'); } catch(e){ showToast(e.message,'danger'); } }
+  function openCreate(){
+    dispatch({type:'RESET'});
+    lastProcessedLineRef.current = null; // Réinitialiser le ref
+    setShowModal(true);
+    setFormError('');
+    setModalTab('general');
+  }
+
+  async function openEdit(id){
+    try {
+      const r=await fetch('/api/schedules?id='+id+'&withStops=1', { credentials:'include' });
+      if(!r.ok) throw new Error('Lecture impossible');
+      const s=await r.json();
+      const dto={
+        id:s.id,
+        ligneId:s.ligne_id||s.ligneId,
+        departureStation:s.departure_station||s.departureStation,
+        arrivalStation:s.arrival_station||s.arrivalStation,
+        departureTime:(s.departure_time||s.departureTime||'').slice(0,5),
+        arrivalTime:(s.arrival_time||s.arrivalTime||'').slice(0,5),
+        trainNumber:s.train_number||s.trainNumber||'',
+        trainType:s.train_type||s.trainType||'',
+        rollingStock:s.rolling_stock||s.rollingStock||'',
+        days:s.days||s.days,
+        customDates:s.custom_dates||s.customDates||[],
+        stops: (Array.isArray(s.stops)? s.stops:[]).map(st=> ({
+          station: st.station_name||st.station,
+          arrival:(st.arrival_time||st.arrival||'').slice(0,5),
+          departure:(st.departure_time||st.departure||'').slice(0,5)
+        })),
+        isSubstitution: !!(s.isSubstitution ?? s.is_substitution)
+      };
+      dispatch({type:'LOAD_FROM_DTO', payload:{ ...dto, days: dto.days }});
+      // Marquer la ligne comme déjà traitée pour éviter le remplissage automatique
+      lastProcessedLineRef.current = `${dto.ligneId}-${dto.departureStation}-${dto.arrivalStation}`;
+      setShowModal(true);
+      setFormError('');
+      setModalTab('general');
+    } catch(e){
+      showToast(e.message,'danger');
+    }
+  }
 
   async function saveForm(){ if(saving) return; setSaving(true); setFormError(''); try { const errs = validateForm(formState, stations); if(errs.length) throw new Error(errs.join(', ')); const payload = buildPayload(formState); const method=formState.original? 'PUT':'POST'; const url=formState.original? '/api/schedules?id='+formState.original.id : '/api/schedules'; const r=await fetch(url,{ method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload), credentials:'include' }); let j=null; try{ j=await r.json(); }catch{} if(!r.ok) throw new Error(j?.error||'Echec enregistrement'); await reloadSchedules(false); setShowModal(false); showToast(formState.original? 'Sillon mis à jour':'Sillon créé'); if(j?.schedule){ dispatch({type:'APPLY_SAVED_DTO', payload:j.schedule}); } } catch(e){ setFormError(e.message); } finally { setSaving(false);} }
 
@@ -703,6 +771,44 @@ function SubstitutionForm({state,dispatch}){
       .form-check-input { margin-right: 0.5rem; }
       .form-check-label { font-size: 1rem; font-weight: normal; text-transform: none; letter-spacing: normal; }
       .substitution-info { background-color: #f8f9fa; padding: 0.75rem; border-radius: 0.25rem; margin-top: 0.5rem; }
+    `}</style>
+  </div>;
+}
+
+// Composant AutocompleteTrainType ajouté en bas du fichier
+function AutocompleteTrainType({value,onChange}){
+  // Charger la liste des logos/types depuis le fichier statique public/img/type/data.json
+  const { data:items } = useFetchOnce('/img/type/data.json', j=> (j && j.logos) ? j.logos : []);
+  // Utiliser le champ `name` des logos comme nom de type affiché
+  const types = useMemo(()=> Array.from(new Set((items||[]).map(i=> i.name).filter(Boolean))).sort((a,b)=> a.localeCompare(b, 'fr', {sensitivity:'base'})), [items]);
+  const [open,setOpen] = useState(false);
+  const inputRef = useRef(null);
+  const val = value || '';
+  const filtered = useMemo(()=>{
+    const q = String(val||'').trim().toLowerCase();
+    if(!q) return types.slice(0, 20);
+    return types.filter(t=> String(t||'').toLowerCase().includes(q)).slice(0,20);
+  },[types,val]);
+
+  // Handlers
+  function onInput(e){ const v = e.target.value; onChange?.(v); setOpen(true); }
+  function onFocus(){ setOpen(true); }
+  function onBlur(){ // délai pour laisser le click sur une suggestion
+    setTimeout(()=> setOpen(false), 150);
+  }
+  function pick(t){ onChange?.(t); setOpen(false); try{ inputRef.current?.focus(); } catch{} }
+
+  return <div style={{position:'relative'}}>
+    <input ref={inputRef} className="form-control" type="text" value={val} onChange={onInput} onFocus={onFocus} onBlur={onBlur} placeholder="Type de train" />
+    {open && filtered && filtered.length>0 && (
+      <ul className="autocomplete-list" role="listbox">
+        {filtered.map((t,idx)=> <li key={t+idx} role="option" tabIndex={0} onMouseDown={()=> pick(t)} onKeyDown={e=>{ if(e.key==='Enter'){ pick(t); e.preventDefault(); } }} className="autocomplete-item">{t}</li>)}
+      </ul>
+    )}
+    <style jsx>{`
+      .autocomplete-list{ position:absolute; left:0; right:0; z-index:60; max-height:220px; overflow:auto; margin:6px 0 0; padding:6px 0; list-style:none; border:1px solid #d7dde6; background:#fff; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,0.08);} 
+      .autocomplete-item{ padding:.45rem .6rem; cursor:pointer; }
+      .autocomplete-item:hover, .autocomplete-item:focus{ background:#f3f6fa; outline:none; }
     `}</style>
   </div>;
 }

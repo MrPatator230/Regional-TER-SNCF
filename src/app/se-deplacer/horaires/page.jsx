@@ -61,7 +61,7 @@ export default function HorairesPage() {
           {/* On réutilise la même carte de planner que sur l'accueil */}
           <div className="planner-container">
             <div className="card planner-card home-planner-card">
-              <wcs-button shape="round" mode="clear" class="swap-button" onClick={swapStations} aria-label="Inverser départ et arrivée">
+              <wcs-button shape="round" mode="clear" className="swap-button" onClick={swapStations} aria-label="Inverser départ et arrivée">
                 <wcs-mat-icon icon="swap_vert"></wcs-mat-icon>
               </wcs-button>
 
@@ -128,7 +128,7 @@ export default function HorairesPage() {
                     style={{ border: "none", outline: "none", background: "transparent" }}
                   />
                 </div>
-                <div className="planner-input d-flex align-items-center justify-content-center" style={{ width: "120px" }}>
+                <div className="planner-input d-flex align-items-center justify-content-center time-input">
                   <input
                     type="time"
                     value={outTime}
@@ -172,7 +172,8 @@ export default function HorairesPage() {
                       value={retTime}
                       onChange={(e) => setRetTime(e.target.value)}
                       aria-label="Heure retour"
-                      style={{ border: "none", outline: "none", background: "transparent", textAlign: "center", width: "80px" }}
+                      className="time-input small"
+                      style={{ border: "none", outline: "none", background: "transparent", textAlign: "center", width: "100%" }}
                     />
                   </div>
                 ) : (
@@ -194,7 +195,8 @@ export default function HorairesPage() {
                     value={passengers}
                     onChange={(e) => setPassengers(Math.max(1, Math.min(9, Number(e.target.value) || 1)))}
                     aria-label="Nombre de voyageurs"
-                    style={{ width: "70px", border: "none", outline: "none", background: "transparent" }}
+                    className="numeric-input"
+                    style={{ border: "none", outline: "none", background: "transparent", width: "100%" }}
                   />
                   <span>,</span>
                   <label htmlFor="carte-reduction" className="mb-0">
@@ -213,7 +215,7 @@ export default function HorairesPage() {
                     <option value="jeune">Carte Jeune</option>
                   </select>
                 </div>
-                <wcs-button mode="clear" shape="round" class="p-0" onClick={() => setPassengers((n) => Math.min(9, n + 1))} aria-label="Ajouter un voyageur">
+                <wcs-button mode="clear" shape="round" className="p-0" onClick={() => setPassengers((n) => Math.min(9, n + 1))} aria-label="Ajouter un voyageur">
                   <wcs-mat-icon icon="add"></wcs-mat-icon>
                 </wcs-button>
               </div>
@@ -229,4 +231,3 @@ export default function HorairesPage() {
     </>
   );
 }
-

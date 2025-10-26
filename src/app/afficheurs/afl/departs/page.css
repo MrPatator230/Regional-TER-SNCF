@@ -1,0 +1,312 @@
+/* Afficheur AFL Départs - Style exactement identique à l'image */
+.afl-display {
+    width: 100vw;
+    height: 100vh;
+    background: #0039C2;
+    color: white;
+    font-family: 'Achemine', 'Arial', sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Messages de chargement et d'erreur */
+.loading-message,
+.error-message,
+.empty-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 2rem;
+}
+
+.error-message {
+    color: #FF6B6B;
+}
+
+/* En-tête */
+.afl-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 40px;
+    background: #0064E1;
+    height: 120px;
+    box-sizing: border-box;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex: 1;
+}
+
+.train-icon {
+    font-size: 2.8rem;
+    color: white;
+}
+
+.header-title {
+    font-size: 4.5rem;
+    font-weight: 700;
+    color: white;
+}
+
+.header-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+}
+
+.pagination {
+    display: flex;
+    gap: 25px;
+}
+
+.page-indicator {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.3rem;
+    font-weight: 700;
+}
+
+.page-indicator.active {
+    background: white;
+    color: #0039C2;
+}
+
+.header-right {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex: 1;
+}
+
+.current-time {
+    font-size: 3.2rem;
+    font-weight: 700;
+    color: white;
+}
+
+/* Liste des départs */
+.departures-list {
+    flex: 1;
+    padding: 0;
+    background: #0039C2;
+}
+
+.departure-row {
+    display: flex;
+    align-items: center;
+    padding: 25px 40px;
+    min-height: 200px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Section horaire */
+.time-section {
+    width: 185px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-right: 35px;
+}
+
+.departure-time {
+    font-size: 5rem;
+    font-weight: 700;
+    color: #BFFF00;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+
+.status-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 5px 12px;
+    border-radius: 20px;
+}
+
+.check-circle {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.check-icon {
+    font-size: 1.5rem;
+    color: #0039C2;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.status-text {
+    font-size: 2rem;
+    color: white;
+    font-weight: 500;
+}
+
+/* Section train */
+.train-info {
+    width: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 35px;
+}
+
+.train-type {
+    font-size: 2rem;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+.train-number {
+    font-size: 1.7rem;
+    color: #D0D0D0;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* Section destination */
+.destination-section {
+    flex: 1;
+    margin-right: 35px;
+}
+
+.destination-main {
+    font-size: 5rem;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.bus-icon {
+    font-size: 3rem;
+    color: white;
+}
+
+.via-stations {
+    font-size: 1.5rem;
+    color: white;
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+/* Section voie */
+.voie-section {
+    width: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.voie-display {
+    width: 120px;
+    height: 95px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.voie-number-large {
+    width: 95px;
+    height: 120px;
+    border-radius: 12px;
+    background: white;
+    color: #0039C2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+
+.voie-label {
+    font-size: 0.9rem;
+    color: #0039C2;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1;
+}
+
+.voie-number {
+    font-size: 3.3rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #0039C2;
+}
+
+.bus-platform {
+    width: 95px;
+    height: 120px;
+    border-radius: 12px;
+    background: white;
+    color: #0039C2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bus-platform svg {
+    width: 60px;
+    height: 60px;
+}
+
+/* Responsive */
+@media (max-width: 1400px) {
+    .header-title {
+        font-size: 2.8rem;
+    }
+
+    .current-time {
+        font-size: 2.8rem;
+    }
+
+    .departure-time {
+        font-size: 3.3rem;
+    }
+
+    .destination-main {
+        font-size: 2.6rem;
+    }
+}
+
+@media (max-width: 1200px) {
+    .departure-row {
+        padding: 22px 30px;
+        min-height: 115px;
+    }
+
+    .departure-time {
+        font-size: 2.8rem;
+    }
+
+    .destination-main {
+        font-size: 2.3rem;
+    }
+
+    .via-stations {
+        font-size: 1.3rem;
+    }
+}

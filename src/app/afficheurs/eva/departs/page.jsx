@@ -510,7 +510,6 @@ export default function AfficheurEVAArrivees(){
                     // Pastille orange si d.delay (from API) ou computedDelay > 0
                     const isDelayed = (delayMinutes && delayMinutes > 0);
                     const pillClass = d.cancelled ? 'red' : (isDelayed ? 'orange' : 'blue');
-                    const incidentClass = incident.toLowerCase().includes('panne') ? 'red' : 'orange';
 
                     // Normaliser les noms de station pour l'affichage dans le Marquee
                     const stopsAfterGare = (currentStopIdx >= 0 && currentStopIdx < stops.length - 1)
@@ -530,39 +529,38 @@ const names = stopsAfterGare.map(s => (typeof s === 'string') ? s : (s && (s.sta
 
                     // --- calculer la valeur de quai à afficher (null ou chaîne non vide)
                     const { stop: _stopForPlatform } = getStopForGare(d);
-                     const candidatesForId = [d.id, d.schedule_id, d.sillon_id, d.sillonId, (_stopForPlatform && (_stopForPlatform.id || _stopForPlatform.sillon_id || _stopForPlatform.schedule_id))];
-                     const sId = candidatesForId.map(normalizeIdNum).find(x => x !== null);
-                     const adminAssignedRaw = (sId !== undefined && sId !== null && adminPlatformsMap && adminPlatformsMap[String(sId)] !== undefined) ? adminPlatformsMap[String(sId)] : undefined;
-
-                     let platformToShow = null;
-                     if (adminAssignedRaw !== undefined) {
-                         // admin a explicitement défini un quai (même vide) -> si vide => pas d'affichage
-                         platformToShow = (adminAssignedRaw !== null && String(adminAssignedRaw).trim() !== '') ? String(adminAssignedRaw) : null;
-                     } else {
-                         // NOTE: platformForStation import existe ; on l'utilisera ci-dessous si disponible
-                     }
-
-                     // si platformToShow encore null, résoudre avec utilitaires/API
-                     if (!platformToShow) {
-                         try{
-                            platformToShow = (() => {
-                                // priorité : utilitaire platformForStation
-                                if (typeof platformForStation === 'function'){
-                                    try{ const v = platformForStation(d, gare); if(v !== null && v !== undefined && String(v).trim() !== '') return String(v); }catch(_){ }
-                                }
-                                // ensuite champ provenant de l'API
-                                const apiAssigned = (d.platform !== undefined && d.platform !== null) ? d.platform : (d.voie !== undefined && d.voie !== null ? d.voie : undefined);
-                                if(apiAssigned !== undefined && apiAssigned !== null && String(apiAssigned).trim() !== '') return String(apiAssigned);
-                                // fallbacks éventuels
+                    const candidatesForId = [d.id, d.schedule_id, d.sillon_id, d.sillonId, (_stopForPlatform && (_stopForPlatform.id || _stopForPlatform.sillon_id || _stopForPlatform.schedule_id))];
+                    const sId = candidatesForId.map(normalizeIdNum).find(x => x !== null);
+                    // Nouvelle logique alignée sur l'afficheur classique :
+                    // 1) si l'API a explicitement fourni la propriété `platform` (même chaîne vide), on l'utilise (vide -> '—')
+                    // 2) sinon si l'admin a une attribution dans adminPlatformsMap pour le sId -> utiliser (vide -> '—')
+                    // 3) sinon utiliser l'utilitaire platformForStation (résolution admin locale) (vide -> '—')
+                    // 4) sinon utiliser les champs API fallback (voie / platform / track) ou '—' par défaut
+                    const apiAssigned = Object.prototype.hasOwnProperty.call(d, 'platform') ? d.platform : undefined;
+                    let platformToShow = null;
+                    if (apiAssigned !== undefined) {
+                        // l'API a explicitement fourni un champ 'platform' (même si vide)
+                        platformToShow = (apiAssigned !== null && String(apiAssigned).trim() !== '') ? String(apiAssigned) : '—';
+                    } else {
+                        // vérifier la map d'attributions admin si elle existe
+                        const adminAssignedRaw = (sId !== undefined && sId !== null && adminPlatformsMap && Object.prototype.hasOwnProperty.call(adminPlatformsMap, String(sId))) ? adminPlatformsMap[String(sId)] : undefined;
+                        if (adminAssignedRaw !== undefined) {
+                            platformToShow = (adminAssignedRaw !== null && String(adminAssignedRaw).trim() !== '') ? String(adminAssignedRaw) : '—';
+                        } else {
+                            // tenter l'utilitaire platformForStation (résolution centralisée locale)
+                            let adminPlatformResolved = null;
+                            try{ if (typeof platformForStation === 'function') adminPlatformResolved = platformForStation(d, gare); }catch(_){ adminPlatformResolved = null; }
+                            if (adminPlatformResolved !== null && adminPlatformResolved !== undefined){
+                                platformToShow = (String(adminPlatformResolved).trim() !== '') ? String(adminPlatformResolved) : '—';
+                            } else {
+                                // champ API fallback ou '—' par défaut
                                 const fallbackPlatform = d.voie || d.platform || d.platform_code || d.track;
-                                if(fallbackPlatform !== undefined && fallbackPlatform !== null && String(fallbackPlatform).trim() !== '') return String(fallbackPlatform);
-                                return null;
-                            })();
-                         }catch(e){ platformToShow = null; }
-                     }
-
-                     // Corrige : définir la classe CSS si aucun quai n'est disponible (évite référence à noVoieClass non définie)
-                     const noVoieClass = platformToShow ? '' : 'no-voie';
+                                platformToShow = (fallbackPlatform !== undefined && fallbackPlatform !== null && String(fallbackPlatform).trim() !== '') ? String(fallbackPlatform) : '—';
+                            }
+                        }
+                    }
+                    // On veut toujours afficher la boîte de quai dans les EVA (même si elle contient '—')
+                    const noVoieClass = '';
 
                     return (
                         <article className={`eva-row ${rowStateClass} ${noVoieClass}`} key={d.id || i}>
@@ -580,14 +578,11 @@ const names = stopsAfterGare.map(s => (typeof s === 'string') ? s : (s && (s.sta
 
                             <div className="destcol">
                                 <div className="dest-top">
-                                    <div className="dest-origin">
-                                        <div className="terminus-name">{destination}</div>
-                                    </div>
+                                    <div className="dest-origin">{destination}</div>
                                     {isDelayed && incident && <div className="delay-cause">{incident}</div>}
                                 </div>
                                 <div className="dest-main">
-
-                                    {incident && <span className={`dest-badge ${incidentClass}`}>{incident}</span>}
+                                    {/* Ligne "train direct" ou autres infos */}
                                 </div>
                                 <div className="via-line">
                                     <span className="via-prefix">via</span>

@@ -155,6 +155,16 @@
   padding: 12px 18px;
   height: 100%;
 }
+
+.dest-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
 .dest-origin {
   font-size: 70px;
   font-weight: 900;
@@ -164,9 +174,22 @@
   text-overflow: ellipsis;
   font-family: "Achemine", "Avenir", sans-serif;
   line-height: 1;
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
-.dest-main{
+
+.delay-cause {
+  background: var(--accent-orange);
+  color: var(--navy-ink);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.dest-main {
   height: auto;
   font-size: 18px;
   font-weight: 700;
@@ -189,92 +212,19 @@
   font-size:38px; /* même taille que .time-pill-text */
   color:#3f6b8d;
   max-width:1300px; /* Limite la zone d'affichage demandée */
-  position: relative; /* conteneur pour le marquee */
-  /* garder le texte sur une ligne; le contenu défilera en boucle */
+  overflow: hidden;
   white-space: nowrap;
-  overflow: hidden; /* le parent .eva-row permet d'afficher le débordement si besoin */
+  text-overflow: ellipsis;
 }
 
-/* Conteneur visible du défilement (la zone de 850px) */
-.via-marquee{
-  display:inline-block;
-  vertical-align:middle;
-  width: calc(1300px - 0px); /* retire la largeur approximative du label "via" pour éviter chevauchement */
-  max-width: calc(100% - 120px);
-  overflow: hidden; /* la piste pourra bien dépasser si l'ancêtre le permet */
-}
-
-/* Piste contenant deux fois la séquence pour boucler en continu */
-.via-track{
-  display:flex;
-  align-items:center;
-  gap:20px;
-  white-space: nowrap;
-  will-change: transform;
-  /* animation activée uniquement quand la classe .scrolling est ajoutée (définie en JS) */
-  /* animation activée uniquement quand la classe .scrolling est ajoutée */
-}
-
-.via-track.scrolling{
-  /* utiliser la variable si fournie, avec défaut 18s */
-  animation-name: via-scroll;
-  animation-duration: var(--marquee-duration, 18s);
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-/* Séparateur rond vert entre deux via-items (si on ne veut pas d'élément supplémentaire en HTML) */
-.via-item + .via-item::before{
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent-green);
-  margin: 0 12px;
-  flex: 0 0 auto;
-}
-
-/* Petite variante si on met un .dot dans le HTML (compatibilité) */
-.via-item .dot{ width:10px;height:10px;border-radius:50%;background:var(--accent-green);display:inline-block;margin:0 12px}
-
-@keyframes via-scroll{
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-100%); }
-}
-
-/* --- Voie column --- */
+/* --- Quai (voie) */
 .voiecol{display:flex;align-items:center;justify-content:center;padding:8px}
 .voie-box-outer{background:var(--border-dark);color:#fff;width:90px;height:90px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;box-sizing:border-box}
 .voie-label{font-size:14px;font-weight:700;color:#9fb7d1}
 .voie-letter{font-size:40px;font-weight:900;line-height:1;margin-top:4px}
 
-/* --- Green type/number column --- */
+/* --- Zone type de train + numéro (colonne verte) */
 .greencol{background:var(--accent-green); display: flex; align-items: center; justify-content: center;}
 .train-green{padding:8px 18px;display:flex;flex-direction:column;align-items:center;gap:4px}
 .train-type{font-size:18px;font-weight:800;color:var(--navy-ink)}
 .train-number{font-size:24px;font-weight:900;color:var(--navy-ink);letter-spacing:1px}
-
-/* --- Footer alert --- */
-.eva-footer{background:var(--accent-orange);padding:12px 24px;margin:12px; border-radius: 8px;}
-.warning{display:flex;align-items:center;gap:16px;flex:1}
-.wi{
-    font-size: 2rem;
-    color: var(--bg-dark);
-}
-.wt{font-size:18px;font-weight:700;color:var(--navy-ink);line-height:1.2}
-
-.eva-empty {
-    color: white;
-    text-align: center;
-    padding-top: 50px;
-}
-.message {
-    color: white;
-    text-align: center;
-    font-size: 24px;
-    padding: 20px;
-}
-.error {
-    color: var(--accent-red);
-}

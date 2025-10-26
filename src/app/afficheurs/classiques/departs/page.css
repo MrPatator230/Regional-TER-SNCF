@@ -1,123 +1,37 @@
-/* Styles pour l'afficheur Départs Classique */
+/* page.css (minimal) — styles principaux moved to component scoped styled-jsx
+   This file now contains only variables and a few fallbacks to avoid conflicts.
+*/
 :root{
-  --blue-1: #063b73; /* très foncé */
-  --blue-2: #0b66a3; /* bleu principal */
-  --yellow: #f6e912;
-  --ticker-bg: #f2b24a;
-  --time-size: 84px;
-  --destination-size: 120px;
+    --green-primary:#0066B0;
+    --green-dark:#003B7D;
+    --green-alt:#003B7D;
+    --yellow:#ffe300;
+    --white:#ffffff;
+    --footer-bg:#003B7D;
+    --clock-blue:#083b6b;
+
+    /* Variables pour le thème bleu des départs */
+    --dep-blue-1: #0b5394;
+    --dep-blue-2: #063b73;
+
+    /* Variables pour le thème vert des arrivées */
+    --arr-green-primary: #116938;
+    --arr-green-dark: #0f5b33;
+    --arr-green-alt: #156337;
+    --arr-footer-bg: #0b3f22;
 }
 
-.departures-display{
-  background: linear-gradient(180deg, var(--blue-2) 0%, var(--blue-1) 100%);
-  color: #ffffff;
-  min-height: 100vh;
-  font-family: Avenir, "Achemine", system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-  position: relative;
-  overflow: hidden;
+html,body{height:100%;margin:0;padding:0;}
+
+/* Keep body background as a fallback for non-JS rendering */
+body{background:var(--green-primary);
+    color:var(--white);
+    font-family:'Achemine', 'Avenir', Arial, sans-serif;
 }
 
-.departures-watermark{
-  position: absolute;
-  right: -40px;
-  top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  color: rgba(255,255,255,0.06);
-  font-weight: 800;
-  font-size: 16rem;
-  line-height: 1;
-  letter-spacing: 6px;
-  pointer-events: none;
-  user-select: none;
-  z-index: 1;
-}
+/* Minimal resets for elements used by the afficheur */
+.board-root, .board-wrapper{min-height:100vh}
+.rows{overflow:hidden}
+.row{box-sizing:border-box}
 
-.departures-display > .dep-row, .departures-display .dep-row{
-  display: flex;
-  align-items: center;
-  padding: 28px 28px;
-  gap: 18px;
-  position: relative;
-  z-index: 10;
-}
-
-/* bandes alternées — n'utiliser que les 2 couleurs principales du design */
-/* Utilise directement les couleurs définies en haut (variables : --blue-1 / --blue-2) */
-.departures-display .dep-wrapper.even .dep-row{ background: var(--blue-1); }
-.departures-display .dep-wrapper.odd .dep-row{ background: var(--blue-2); }
-
-/* Fallback: si les wrappers even/odd ne sont pas présents, appliquer une alternance
-   simple via nth-child sur les lignes elles-mêmes. */
-.departures-display > .dep-row:nth-child(2n){ background: var(--blue-1); }
-.departures-display > .dep-row:nth-child(2n+1){ background: var(--blue-2); }
-
-.dep-left{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  width:360px;
-  min-width:280px;
-}
-.dep-logo{ width:72px; height:auto; margin-left:2px; background:#fff; padding:6px; border-radius:6px }
-.dep-meta{ display:flex; flex-direction:column; }
-.dep-status{ font-size:22px; color:#ffffff; opacity:0.98; margin-bottom:6px; font-weight:700 }
-.dep-time{ display:flex; align-items:baseline; gap:8px }
-.dep-time strong{ color: var(--yellow); font-size:var(--time-size); line-height:1; font-weight:900; font-family: 'Avenir', 'Achemine', sans-serif }
-.time-original{ color:#ffffff; font-size:42px; opacity:0.95; font-weight:700 }
-.time-later{ color: var(--yellow); font-size:52px; margin-left:6px; font-weight:900 }
-.time-cancelled .time-original{ text-decoration: line-through; opacity:0.7 }
-
-.dep-middle{ flex:1; display:flex; flex-direction:column; justify-content:center }
-.dep-destination{ font-size:var(--destination-size); color:#fff; font-weight:400; margin:0; letter-spacing: -1px }
-.dep-sub{ margin-top:8px; color: rgba(255,255,255,0.88); font-size:40px }
-.sub-item{ display:inline-flex; align-items:center }
-.sub-dot{ color: #ffd400; margin: 0 10px; font-weight:800 }
-
-.dep-right{ width:180px; display:flex; justify-content:flex-end; align-items:center; padding-right:32px }
-.platform-outer{ border: 4px solid rgba(255,255,255,0.95); border-radius:16px; padding:8px 10px }
-.platform-inner{ background: #083b73; color: #ffffff; font-size:56px; font-weight:900; padding:6px 18px; border-radius:8px; display:inline-block }
-
-.dep-link{ position: absolute; right: 220px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: rgba(255,255,255,0.9); font-size:28px; padding:8px; cursor:pointer }
-.dep-link .icon{ display:inline-block; transform: translateX(4px) }
-
-/* messages d'état */
-.departures-display > div[style*="background:#063b73"]{ background: #063b73 }
-
-/* ticker bas */
-.dep-ticker{
-  position: fixed;
-  left:0; right:0; bottom:0;
-  background: var(--ticker-bg);
-  color: #083b73;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding: 12px 18px;
-  gap: 12px;
-  z-index: 40;
-  box-shadow: 0 -2px 0 rgba(0,0,0,0.06) inset;
-}
-.dep-ticker .msg{ font-size:44px; font-weight:700; padding-left:16px }
-.dep-ticker .clock{ background: #083b73; color: #fff; padding: 10px 14px; border-radius:10px; font-size:58px; font-weight:800; display:flex; align-items:center; gap:10px }
-.dep-ticker .clock .seconds{ background: var(--ticker-bg); color:#083b73; padding:6px 10px; border-radius:8px; font-weight:900; font-size:28px }
-
-/* info boxes for delays/cancel */
-.departures-display > div[style*="background:#ffecec"], .departures-display > div[style*="background:#fff7e6"]{ padding:10px 14px; font-size:20px }
-
-/* responsive smaller screens */
-@media (max-width: 1400px){
-  :root{ --destination-size: 88px; --time-size: 64px }
-  .dep-logo{ width:64px }
-}
-@media (max-width: 1000px){
-  .dep-destination{ font-size:48px }
-  .dep-time strong{ font-size:40px }
-  .dep-left{ width:220px }
-}
-
-@media (max-width: 600px){
-  .departures-watermark{ display:none }
-  .dep-destination{ font-size:36px }
-  .dep-left{ display:none }
-  .dep-right{ width:90px }
-}
+/* Leave the rest to the component scoped styles (styled-jsx) */

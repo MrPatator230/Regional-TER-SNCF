@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-06T15:49:44.083Z",
+  "generatedAt": "2025-10-24T21:56:22.827Z",
   "logos": [
     {
       "file": "logo-aleop.svg",
@@ -254,8 +254,8 @@
       "name": "Teoz"
     },
     {
-      "file": "logo-ter.svg",
-      "path": "/img/type/logo-ter.svg",
+      "file": "sncf-voyageurs-logo.png",
+      "path": "/img/type/sncf-voyageurs-logo.png",
       "slug": "ter",
       "name": "TER"
     },

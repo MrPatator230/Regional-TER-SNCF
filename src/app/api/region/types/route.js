@@ -1,4 +1,4 @@
-Maintenant, synchronises les quais avec ceux définis sur la page d'attribution des quaisimport { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { query } from '@/js/db';
 
 export const runtime = 'nodejs';

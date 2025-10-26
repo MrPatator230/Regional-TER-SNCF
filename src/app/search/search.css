@@ -1,53 +1,542 @@
-:root { --search-price-green:#034e2d; --search-bg:#f8f8f8; --ticket-max-width:1240px; }
-/* === Ajustements style billet (maquette) === */
-.cards-list { align-items:center; }
-.sched-card {
-  display:grid;
-  position:relative;
-  background:#fcfcfa;
-  border:1px solid #ededed;
-  border-radius:12px;
-  padding:1.15rem 1.75rem 1.25rem;
-  grid-template-columns:140px 1fr 140px 230px; /* colonnes élargies */
-  min-height:120px;
-  gap:0 3rem;
-  width:100%;
-  max-width:var(--ticket-max-width);
+/* CSS pour la page de recherche - Design exact selon l'image */
+:root {
+  --sncf-green: #00ac52;
+  --sncf-dark-green: #034e2d;
+  --sncf-light-green: #e6f4ea;
+  --sncf-light-green-bg: #f0f8f2;
+  --sncf-gray: #6c757d;
+  --sncf-light-gray: #f8f9fa;
+  --sncf-border: #dee2e6;
+  --sncf-text-dark: #1a1a1a;
+  --journey-dot-size: 8px;
+  --journey-line-height: 2px;
+  --ticket-max-width: 1240px;
+  --search-price-green: #034e2d;
 }
-@media (max-width:1300px){ .sched-card { grid-template-columns:120px 1fr 120px 210px; gap:0 2.2rem; } }
-@media (max-width:960px){ .sched-card { grid-template-columns:110px 1fr 110px 190px; gap:0 1.6rem; } }
-.sched-card:before,.sched-card:after { content:""; position:absolute; top:50%; transform:translateY(-50%); width:14px; height:14px; background:var(--search-bg); border:1px solid #e1e1e1; border-radius:50%; box-shadow:0 0 0 4px #fff inset; }
-.sched-card:before { left:-7px; }
-.sched-card:after { right:-7px; }
-.sched-card.is-min .fare-inner { outline:2px solid #fff; box-shadow:0 0 0 3px var(--search-price-green); }
 
-/* Heures & gares */
-.col-time .time.big { font-size:2rem; font-weight:800; letter-spacing:0; }
-.col-time .station { margin-top:.35rem; font-size:1rem; font-weight:500; color:#2f2f2f; }
+/* Layout principal de la page de recherche */
+.search-page {
+  background-color: var(--sncf-light-gray);
+  min-height: 100vh;
+  padding: 0;
+}
 
-/* Timeline revisitée */
-.col-line { display:flex; align-items:center; }
-.line-track { width:100%; display:flex; align-items:center; gap:.75rem; height:auto; }
-.line-track .dot { width:8px; height:8px; background:#111; border-radius:50%; flex:0 0 8px; }
-.line-track .seg { flex:1; height:2px; background:#111; }
-.duration-label { position:static; transform:none; font-size:.85rem; font-weight:400; letter-spacing:.5px; background:transparent; padding:0 1.5rem; color:#222; white-space:nowrap; }
-/* Supprime styles anciens */
-.line-track::before,.line-track::after { display:none; }
+.search-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+}
 
-/* Prix pill */
-.col-fare { align-self:center; justify-self:end; }
-.fare-inner { background:var(--search-price-green); border-radius:16px; padding:1.05rem 2rem 1.15rem; min-width:210px; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:0 2px 4px rgba(0,0,0,.1); }
-.fare-class { font-size:.8rem; font-weight:500; letter-spacing:.5px; text-transform:none; opacity:1; }
-.from-pill { margin-top:.4rem; font-size:.55rem; }
-.fare-price { font-size:1.6rem; font-weight:800; margin-top:.35rem; line-height:1; }
+/* Section des résultats */
+.results-section {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
 
-/* Bouton détails pill vert pâle */
-.details-btn { background:#e6efc9; border:none; color:#1c412d; font-size:.9rem; font-weight:500; padding:.85rem 1.9rem; border-radius:999px; display:inline-flex; align-items:center; gap:.4rem; margin-top:1.25rem; box-shadow:0 0 0 1px #d9e5ba inset; }
-.details-btn:hover { background:#dce7bc; }
+/* En-tête de la page */
+.page-header {
+  margin-bottom: 2rem;
+}
 
-/* Meta train repositionnée */
-.row-train { grid-column:2 / span 1; padding-left:0; margin-left:0; margin-top:1.4rem; font-size:.8rem; gap:.6rem; font-weight:500; color:#1d1d1d; }
-.row-train wcs-mat-icon { color:var(--search-price-green); }
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--sncf-text-dark);
+  margin-bottom: 1.5rem;
+}
+
+/* Filtres modes de transport */
+.transport-filters {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0;
+}
+
+.filter-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--sncf-text-dark);
+}
+
+.filter-label wcs-mat-icon {
+  color: var(--sncf-gray);
+}
+
+/* En-tête de date */
+.date-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--sncf-border);
+}
+
+.date-icon {
+  color: var(--sncf-green);
+}
+
+.date-text {
+  font-weight: 700;
+  color: var(--sncf-green);
+  text-transform: capitalize;
+}
+
+/* Liste des trajets */
+.journeys-list {
+  margin-top: 2rem;
+}
+
+/* Carte de trajet */
+.journey-card {
+  background: white;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s ease;
+}
+
+.journey-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+}
+
+/* Perforation des billets */
+.journey-card::before,
+.journey-card::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  background: var(--sncf-light-gray);
+  border: 1px solid #e6e6e6;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px white inset;
+  z-index: 2;
+}
+
+.journey-card::before {
+  left: -7px;
+}
+
+.journey-card::after {
+  right: -7px;
+}
+
+/* Contenu de la carte */
+.journey-content {
+  display: grid;
+  grid-template-columns: 140px 1fr 140px 200px;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  gap: 2rem;
+}
+
+/* Section départ */
+.departure-section {
+  text-align: left;
+}
+
+.departure-section .time,
+.arrival-section .time {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--sncf-text-dark);
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.departure-section .station,
+.arrival-section .station {
+  font-size: 0.95rem;
+  color: var(--sncf-text-dark);
+  font-weight: 500;
+}
+
+/* Section ligne de trajet */
+.journey-line-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.journey-line {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+.line-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--sncf-text-dark);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.line-track {
+  flex: 1;
+  height: 2px;
+  background-color: var(--sncf-text-dark);
+  margin: 0 1rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.duration {
+  background: white;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--sncf-text-dark);
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.train-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--sncf-gray);
+  font-weight: 500;
+}
+
+.train-info wcs-mat-icon {
+  color: var(--sncf-green);
+  font-size: 1rem;
+}
+
+/* Section arrivée */
+.arrival-section {
+  text-align: right;
+}
+
+/* Section tarif */
+.fare-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.fare-pill {
+  background: var(--sncf-dark-green);
+  color: white;
+  border-radius: 16px;
+  padding: 0.75rem 1.5rem;
+  text-align: center;
+  min-width: 160px;
+  box-shadow: 0 2px 8px rgba(3, 78, 45, 0.3);
+}
+
+.class-label {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  margin-bottom: 0.25rem;
+}
+
+.price {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Bouton détails */
+.details-btn {
+  background: var(--sncf-light-green-bg);
+  border: 1px solid #d4e8d8;
+  color: var(--sncf-dark-green);
+  padding: 0.5rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.details-btn:hover {
+  background: #e6f4ea;
+  border-color: #c0dcc4;
+}
+
+.details-btn wcs-mat-icon {
+  font-size: 1rem;
+}
+
+/* Détails du trajet */
+.journey-details {
+  background: #fafafa;
+  border-top: 1px solid #e6e6e6;
+  padding: 1.5rem 2rem;
+}
+
+.details-content h4 {
+  color: var(--sncf-text-dark);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.route-details p {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--sncf-text-dark);
+}
+
+.stops-list h5 {
+  color: var(--sncf-text-dark);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.75rem 0;
+}
+
+.stops-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stop-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 80px;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.875rem;
+}
+
+.stop-time {
+  font-weight: 500;
+  color: var(--sncf-text-dark);
+}
+
+.stop-station {
+  color: var(--sncf-text-dark);
+}
+
+.stop-platform {
+  color: var(--sncf-gray);
+  text-align: right;
+}
+
+/* Bouton jour suivant */
+.next-day-section {
+  text-align: right;
+  padding: 1rem 0 0;
+  margin: 0.25rem 0 0;
+}
+
+.next-day-btn {
+  background: transparent;
+  border: none;
+  color: var(--sncf-green);
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.next-day-btn:hover {
+  text-decoration: underline;
+  background: transparent;
+  border-color: transparent;
+}
+
+.next-day-btn wcs-mat-icon {
+  font-size: 1rem;
+}
+
+/* Panneau latéral */
+.sidebar-section {
+  position: sticky;
+  top: 2rem;
+  height: fit-content;
+}
+
+.sidebar-summary {
+  background: var(--sncf-light-green-bg);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.trip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.date-line {
+  font-size: 0.9rem;
+  color: var(--sncf-text-dark);
+  font-weight: 500;
+}
+
+.route-line {
+  font-size: 1.1rem;
+  color: var(--sncf-text-dark);
+  font-weight: 700;
+}
+
+.passenger-info {
+  font-size: 0.85rem;
+  color: var(--sncf-gray);
+}
+
+.modify-btn {
+  background: white;
+  border: 1px solid var(--sncf-border);
+  color: var(--sncf-green);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modify-btn:hover {
+  background: var(--sncf-light-green);
+  border-color: var(--sncf-green);
+}
+
+.modify-btn wcs-mat-icon {
+  font-size: 1rem;
+}
+
+/* États de chargement et erreur */
+.loading-section {
+  text-align: center;
+  padding: 3rem 0;
+}
+
+.loading-section .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid var(--sncf-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-section p {
+  color: var(--sncf-gray);
+  font-size: 0.9rem;
+}
+
+.alert {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.no-results {
+  text-align: center;
+  padding: 3rem 0;
+  color: var(--sncf-gray);
+}
+
+.loading-fallback {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.loading-fallback .spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--sncf-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .search-container {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .sidebar-section {
+    order: -1;
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .journey-content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .journey-line-section {
+    order: 2;
+  }
+
+  .arrival-section {
+    text-align: center;
+  }
+
+  .journey-card::before,
+  .journey-card::after {
+    display: none;
+  }
+
+  .search-container {
+    padding: 1rem;
+  }
+
+  .results-section {
+    padding: 1rem;
+  }
+}
 
 /* Navigation boutons position fine */
 .nav-prev { top:-1.55rem; right:0; font-size:.7rem; }

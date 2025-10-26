@@ -358,7 +358,7 @@ export default function AfficheurEVAArrivees(){
   }, [perturbations, data?.arrivals, dateParam]);
 
   if(!gare) return (
-    <div className="eva-root">
+    <div className="eva-root afficheur-root">
       <div className="eva-empty">
         <h1>Paramètre "gare" manquant</h1>
         <p>Ajouter ?gare=NomDeLaGare dans l'URL.</p>
@@ -437,7 +437,7 @@ export default function AfficheurEVAArrivees(){
   // Affichage des horaires filtrés après tous les filtres
   // (heure, origine, numéro, voie, type, statut)
   return (
-    <div className="eva-root">
+    <div className="eva-root afficheur-root">
       <header className="eva-topbar">
         <div className="eva-left">
           <div className="eva-icon"><FaTrain /></div>
@@ -547,15 +547,12 @@ export default function AfficheurEVAArrivees(){
 
               <div className="destcol">
                 <div className="dest-top">
-                  <div className="dest-origin">
-                    {origin}
-                  </div>
+                  <div className="dest-origin">{origin}</div>
                   {/* Box indiquant la cause du retard, positionnée à droite du nom d'origine */}
                   {isDelayed && incident && <div className="delay-cause">{incident}</div>}
                 </div>
                 <div className="dest-main">
-
-                   {incident && <span className={`dest-badge ${incidentClass}`}>{incident}</span>}
+                   {/* Autres infos si nécessaire */}
                 </div>
                 <div className="via-line">
                   <span className="via-prefix">via</span>

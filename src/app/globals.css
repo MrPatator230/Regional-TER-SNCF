@@ -684,47 +684,399 @@ body {
 /* safe small-screen tweaks */
 @media (max-width:480px){ .dep-destination { font-size:22px; } .dep-time { font-size:28px; } .platform-inner { font-size:18px; padding:4px 8px; } }
 
-/* Affinement visuel: tailles et poids pour l'afficheur */
-:root {
-  --dep-time-size: 48px;
-  --dep-time-size-lg: 64px;
-  --dep-dest-size: 64px;
-  --dep-dest-size-lg: 92px;
-  --dep-row-height: 96px;
-  --dep-blue-1: #0b62a3; /* bande claire */
-  --dep-blue-2: #063b73; /* bande foncée */
+/* --------- Mobile & accessibility improvements (added) --------- */
+
+/* Prevent automatic text-size adjustments on mobile browsers */
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+/* Make planner columns fluid on intermediate sizes using CSS variables */
+@media (max-width: 1200px) {
+  :root {
+    --planner-left-col: clamp(360px, 55vw, 520px);
+    --planner-right-col: clamp(240px, 28vw, 350px);
+  }
+}
+@media (max-width: 900px) {
+  :root {
+    --planner-left-col: 1fr;
+    --planner-right-col: 1fr;
+  }
 }
 
-.dep-row { min-height: var(--dep-row-height); padding: 20px 30px; }
-.dep-row:nth-child(odd){ background: var(--dep-blue-1); }
-.dep-row:nth-child(even){ background: var(--dep-blue-2); }
+/* Touch targets: ensure buttons and interactive controls are large enough */
+button, .wcs-button, .search-button, .rc-details-btn, .details-pill, .toggle-pill, .planner-input, .swap-button, .dep-link {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
 
-.dep-time { font-size: var(--dep-time-size); color: var(--sncf-yellow); font-weight:900; }
-@media(min-width:1200px){ .dep-time { font-size: var(--dep-time-size-lg); } }
+/* Full-width primary actions on mobile */
+@media (max-width: 780px) {
+  .search-button, .wcs-button[primary], .wcs-button { width: 100% !important; display: block; }
+  .planner-input { padding: 0.9rem 1rem; }
+  .planner-container { gap: 1rem; }
 
-a .dep-time, .dep-time strong { color: var(--sncf-yellow); }
+  /* Stack card grid layouts into single columns for readability */
+  .rc-grid, .jr-main, .departures-header, .departure-row { grid-template-columns: 1fr !important; gap: 0.6rem !important; }
+  .rc-fare, .col-price { min-width: auto; width: auto; align-self: stretch; }
+  .rc-train, .jr-meta { margin-left: 0; }
 
-.dep-destination { font-size: var(--dep-dest-size); font-weight:900; color: #fff; }
-@media(min-width:1200px){ .dep-destination { font-size: var(--dep-dest-size-lg); } }
+  /* Reduce margins and paddings on very small screens */
+  .main-container { padding: 0 0.75rem; }
+  .hero-section { padding: 1rem 0; }
+}
 
-/* Watermark plus grand et positionné exactement comme sur la maquette */
-.departures-watermark span { font-size: 180px; opacity:0.06; letter-spacing:8px; font-weight:900; }
-@media(min-width:1200px){ .departures-watermark span { font-size: 220px; } }
+/* Typography scaling for small screens */
+@media (max-width: 480px) {
+  .hero-title { font-size: 1.4rem; }
+  .info-trafic-title { font-size: 1.25rem; }
+  .prochains-departs-card h4 { font-size: 1.05rem; }
+  .dep-destination { font-size: 22px; }
+  .dep-time { font-size: 28px; }
+  .platform-inner { font-size: 18px; padding: 4px 8px; }
+}
 
-/* Ticker: police plus grande et espacement */
-.dep-ticker { padding: 18px 22px; }
-.dep-ticker .msg { font-size: 28px; font-weight:800; color: #083b73; }
-.dep-ticker .clock { font-size: 24px; padding:10px 16px; border-radius:8px; }
+/* Scale the afficheur sizes responsively using clamp for smoother transitions */
+:root {
+  --dep-time-size: 48px;
+  --dep-dest-size: 64px;
+}
+@media (max-width: 1200px) {
+  :root {
+    --dep-time-size: clamp(28px, 5.5vw, 48px);
+    --dep-dest-size: clamp(28px, 8vw, 64px);
+  }
+}
+@media (max-width: 480px) {
+  :root {
+    --dep-time-size: 28px;
+    --dep-dest-size: 22px;
+    --dep-row-height: 72px;
+  }
+}
+.dep-time { font-size: var(--dep-time-size); }
+.dep-destination { font-size: var(--dep-dest-size); }
 
-/* Plateforme: carré arrondi blanc + intérieur foncé plus grand */
-.platform-outer { padding:8px; border-radius:12px; border:4px solid rgba(255,255,255,0.95); }
-.platform-inner { font-size:34px; padding:6px 14px; border-radius:8px; }
+/* Focus styles for keyboard and assistive tech users */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 3px solid var(--sncf-yellow);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
 
-/* Forcer Avenir Black pour destination si disponible */
-.dep-destination { font-family: 'Avenir', sans-serif; font-weight:900; }
+/* Prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
 
-/* réduire l'encombrement des sous-étapes pour grande maquette */
-.sub-item { font-size:20px; color: rgba(255,255,255,0.8); }
+/* Ensure images are responsive and media content does not overflow */
+img, video, svg { max-width: 100%; height: auto; }
 
-/* garder lien chevron cliquable mais non intrusif */
-.dep-link { background: rgba(255,255,255,0.03); width:48px; height:48px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+/* Improve word wrapping for long station names or links */
+a, .planner-input .value, .planner-input .placeholder, .info-trafic-contenu { word-break: break-word; }
+
+/* Improve contrast for small text where needed (minor adjustments) */
+.info-trafic-contenu, .train-details, .rc-col, .jr-meta { color: var(--sncf-dark-gray); }
+
+/* Utility: ensure panels that overlay content are scrollable on small screens */
+.station-suggest-panel { max-height: 55vh; }
+
+/* Small-screen safe paddings and larger tap targets for list items */
+.station-suggest-list li { padding: 0.6rem 0.65rem; }
+
+/* Make promo cards easer to read on small screens */
+.promo-card h5 { font-size: 1rem; }
+.promo-card p { font-size: 0.95rem; }
+
+/* Accessibility: visible focus for custom elements (WCS) */
+wcs-button:focus-visible, wcs-tag:focus-visible, wcs-mat-icon:focus-visible { outline: 3px solid var(--sncf-yellow); outline-offset: 2px; }
+
+/* Ensure the planner swap button doesn't overlap important controls on small screens */
+@media (max-width: 480px) {
+  .swap-button { top: 36px; right: 0.75rem; }
+}
+
+/* Minor housekeeping */
+html, body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* --------- Admin navigation and afficheurs responsive rules --------- */
+
+/* Admin nav wrapper: small fixed column on desktop, top bar on mobile */
+.admin-nav-wrap { width: 100px; }
+.admin-nav { height: 100vh; overflow:auto; }
+
+@media (max-width: 900px) {
+  /* Transform admin nav into a fixed bottom bar on small screens */
+  .admin-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 56px; /* comfortable touch target */
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.98);
+    border-top: 1px solid var(--sncf-medium-gray);
+    box-shadow: 0 -6px 18px rgba(0,0,0,0.06);
+    z-index: 1600;
+  }
+
+  /* Avoid the original wrapper reserving vertical space */
+  .admin-nav-wrap { height: 0; overflow: visible; }
+
+  /* Make each nav item grow and center its icon */
+  .admin-nav wcs-nav-item {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 6px;
+  }
+
+  /* Visually hide labels but keep them accessible for screen readers.
+     On hover/focus-within we reveal the label to help sighted users if needed. */
+  .admin-nav wcs-nav-item span {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+  .admin-nav wcs-nav-item:focus-within span,
+  .admin-nav wcs-nav-item:hover span {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    clip: auto !important;
+    white-space: normal !important;
+  }
+
+  /* Slightly increase icon size for touch clarity */
+  .admin-nav wcs-nav-item wcs-mat-icon { font-size: 20px; }
+
+  /* Ensure admin pages content is not hidden behind the fixed nav, account for safe area on iOS */
+  .main-container, .main-content, .content-grid, .admin-layout, main {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 56px + 16px) !important; /* safe area + nav height + spacing */
+  }
+}
+
+/* Make admin content area responsive: assume a layout with a sidebar and content */
+.admin-layout { display:grid; grid-template-columns: 100px 1fr; gap:1rem; }
+@media (max-width: 900px) { .admin-layout { grid-template-columns: 1fr; } }
+
+/* Afficheurs - fluidité et mise à l'échelle */
+.departures-display, .dep-row, .dep-ticker, .departures-watermark {
+  width: 100%; box-sizing: border-box;
+}
+
+.dep-row { display:flex; align-items:center; gap:16px; padding: 12px 16px; min-height: var(--dep-row-height); }
+.dep-row > * { flex: 0 1 auto; }
+.dep-row .dep-time { flex: 0 0 auto; }
+.dep-row .dep-destination { flex: 1 1 auto; min-width: 0; }
+.dep-row .platform-outer { flex: 0 0 auto; }
+
+/* Allow the depart rows to wrap on very small widths */
+@media (max-width: 780px) {
+  .dep-row { flex-direction: column; align-items: flex-start; gap: 8px; min-height: auto; padding: 10px; }
+  .dep-row .dep-time { font-size: clamp(20px, 6vw, 48px); }
+  .dep-row .dep-destination { font-size: clamp(18px, 7vw, 36px); }
+  .departures-watermark { display:none; }
+}
+
+/* Ticker and clock adjustments */
+.dep-ticker { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; }
+@media (max-width:480px){ .dep-ticker .msg { font-size:18px; } .dep-ticker .clock { font-size:16px; } }
+
+/* Platform inner: scale down on small screens */
+.platform-inner { font-size: clamp(16px, 4.5vw, 34px); padding: 6px 12px; min-width:40px; }
+
+/* Result cards / journey rows used in admin lists */
+.result-card, .journey-row { width:100%; }
+.rc-grid, .jr-main { grid-template-columns: 1fr; }
+@media (min-width:780px){ .rc-grid { grid-template-columns:110px 1fr 110px 132px; } .jr-main { grid-template-columns:120px 1fr 120px 140px;} }
+
+/* Admin tables / forms responsiveness */
+.table-responsive { width:100%; overflow:auto; }
+.form-row { display:flex; gap:1rem; flex-wrap:wrap; }
+.form-row > * { flex: 1 1 220px; }
+
+/* Ensure modals are full-width on small screens */
+.wcs-dialog { max-width: 720px; width: 95%; }
+@media (max-width:600px){ .wcs-dialog { max-width: 100%; width: 100%; height: 100vh; margin:0; border-radius:0; } }
+
+/* ensure inputs in admin have adequate tap targets */
+input[type="text"], input[type="date"], input[type="time"], select, textarea { min-height:44px; }
+
+/* Admin form and utility components (used in admin afficheurs pages) */
+.admin-form { background:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.08); max-width:100%; }
+.admin-form--compact { max-width:520px; margin-top:16px; }
+.admin-form--wide { max-width:760px; margin-top:20px; }
+.form-control { width:100%; padding:8px 12px; border:1px solid #ccc; border-radius:4px; font-size:14px; }
+.form-row { display:flex; gap:16px; flex-wrap:wrap; }
+
+/* Color preview */
+.color-preview { margin-top:10px; margin-bottom:20px; padding:15px; border-radius:6px; background:#f8f9fa; border:1px solid #dee2e6; }
+.color-preview__title { font-weight:600; margin-bottom:8px; font-size:13px; }
+.color-preview__swatches { display:flex; gap:10px; align-items:center; }
+.color-swatch { width:80px; height:40px; border-radius:4px; border:1px solid #ddd; display:inline-block; }
+.color-preview__label { font-size:13px; color:#666; margin-right:8px; }
+
+/* Suggestions */
+.suggestion-wrap { position:relative; }
+.suggestions-list { position:absolute; top:100%; left:0; right:0; max-height:200px; overflow-y:auto; background:#fff; border:1px solid #ccc; border-radius:4px; margin-top:4px; box-shadow:0 2px 8px rgba(0,0,0,.15); z-index:1000; }
+.suggestion-item { padding:10px 12px; cursor:pointer; border-bottom:1px solid #f0f0f0; font-size:14px; }
+.suggestion-item:hover { background:#f8f9fa; }
+
+/* Preview box */
+.preview-box { margin-top:20px; padding:15px; border-radius:6px; background:#e7f3ff; border:1px solid #b6e0fe; }
+.preview-box__title { font-weight:600; margin-bottom:10px; font-size:14px; }
+.preview-box__content { font-size:13px; color:#333; }
+
+/* Modules box */
+.modules-box { padding:15px; background:#f8f9fa; border-radius:6px; border:1px solid #dee2e6; }
+.module-item { margin-bottom:12px; }
+.module-item label { display:flex; align-items:center; cursor:pointer; font-size:14px; }
+.module-item input[type="checkbox"] { margin-right:10px; width:18px; height:18px; }
+.info-box { margin-top:15px; padding:10px; background:#e7f3ff; border-radius:4px; font-size:13px; color:#004085; }
+
+/* Order box */
+.order-box { margin-top:15px; padding:15px; background:#fff3cd; border:1px solid #ffc107; border-radius:6px; }
+.order-box__title { font-weight:600; margin-bottom:8px; font-size:14px; }
+
+/* Submit row */
+.submit-row { margin-top:24px; }
+
+/* Generic utilities used in admin */
+.pre-scroll { max-height:300px; overflow:auto; }
+.modal-overlay { display:block; background:rgba(0,0,0,.3); }
+.card-img-top.fixed-height { height:160px; overflow:hidden; }
+.img-cover { object-fit:cover; object-position:center; }
+.nowrap { white-space:nowrap; }
+.rich-editor { min-height:6rem; overflow-y:auto; }
+
+/* Small helper for image previews */
+.img-small { height:32px; }
+
+/* Buttons used in fiches-horaires */
+.btn-toggle { font-weight:600; font-size:16px; border:none; border-radius:6px; padding:8px 24px; cursor:pointer; }
+.btn-toggle--active { background:#4b2e5c; color:#fff; }
+.btn-toggle--inactive { background:#eee; color:#333; }
+
+/* --------- Force 16:9 pour tous les afficheurs (Classiques, EVA, AFL) ---------
+   Objectif : quel que soit le device (desktop, tablette, mobile),
+   faire en sorte que l'afficheur conserve un ratio 16:9.
+   - On cible le wrapper global `.afficheurs-layout` (layout des afficheurs)
+   - On applique `aspect-ratio: 16/9` aux enfants directs (les pages d'afficheur)
+   - Fallback pour navigateurs sans `aspect-ratio` via `::before` (padding-top)
+*/
+
+/* Conteneur racine d'un afficheur (layout.jsx) */
+.afficheurs-layout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 0; /* éviter que des flex children dépassent */
+  background: var(--afficheur-bg, transparent);
+  padding: 0; /* l'afficheur doit occuper l'espace exact du ratio */
+}
+
+/* Appliquer le 16:9 au conteneur de contenu de la page d'afficheur
+   (sélection large pour attraper la majorité des implémentations) */
+.afficheurs-layout > *,
+.afficheurs-layout .afficheur-root,
+.afficheurs-layout .afficheur,
+.afficheurs-layout .afficheur-classique,
+.afficheurs-layout .afficheur-eva,
+.afficheurs-layout .afficheur-afl {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  position: relative; /* nécessaire pour le fallback absolute children */
+  overflow: hidden;
+  /* préférer aspect-ratio quand disponible */
+  aspect-ratio: 16 / 9;
+  -webkit-backface-visibility: hidden;
+  /* Veiller à ne pas dépasser la hauteur de la fenêtre : si la hauteur calculée
+     pour 100vw excède 100vh, réduire la largeur pour rester dans la fenêtre */
+  width: min(100vw, calc(100vh * (16 / 9)));
+  max-height: 100vh;
+}
+
+/* Garantir que le viewport visible (par ex. en plein écran mobile) n'a pas de marges qui cassent le ratio */
+.afficheurs-layout { margin: 0; }
+
+/* Fallback pour navigateurs qui ne supportent pas `aspect-ratio` */
+@supports not (aspect-ratio: 16/9) {
+  .afficheurs-layout > *,
+  .afficheurs-layout .afficheur-root,
+  .afficheurs-layout .afficheur,
+  .afficheurs-layout .afficheur-classique,
+  .afficheurs-layout .afficheur-eva,
+  .afficheurs-layout .afficheur-afl {
+    height: auto;
+  }
+  .afficheurs-layout > *::before,
+  .afficheurs-layout .afficheur-root::before,
+  .afficheurs-layout .afficheur::before,
+  .afficheurs-layout .afficheur-classique::before,
+  .afficheurs-layout .afficheur-eva::before,
+  .afficheurs-layout .afficheur-afl::before {
+    content: "";
+    display: block;
+    width: 100%;
+    padding-top: 56.25%; /* 9/16 = 56.25% */
+  }
+  /* Les enfants réels doivent se positionner au dessus du pseudo-élément */
+  .afficheurs-layout > * > *,
+  .afficheurs-layout .afficheur-root > *,
+  .afficheurs-layout .afficheur > *,
+  .afficheurs-layout .afficheur-classique > *,
+  .afficheurs-layout .afficheur-eva > *,
+  .afficheurs-layout .afficheur-afl > * {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+/* S'assurer que les images / vidéos SVG remplissent correctement le conteneur 16:9 */
+.afficheurs-layout img,
+.afficheurs-layout video,
+.afficheurs-layout svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* couvre l'espace 16:9 sans déformation */
+}
+
+/* Pour tablettes / mobiles : forcer l'afficheur à occuper la largeur utile de l'écran
+   et centrer le contenu (utile si l'app est embed ou a chrome supplémentaire) */
+@media (max-width: 1024px) {
+  .afficheurs-layout {
+    width: 100vw;
+    max-width: 100vw;
+    padding: 0;
+  }
+  .afficheurs-layout > * {
+    width: 100vw;
+    max-width: 100vw;
+    margin: 0 auto;
+  }
+}
+
+/* Optionnel : si vous utilisez un conteneur interne nommé .afficheur-viewport, lui appliquer aussi le ratio */
+.afficheurs-layout .afficheur-viewport { aspect-ratio: 16 / 9; width:100%; height: auto; }

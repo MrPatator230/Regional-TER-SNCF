@@ -35,12 +35,15 @@ export default function AfficheurClassiqueArrivees(){
                 if(abort) return;
                 const map = {};
                 (j.logos||[]).forEach(l=>{
-                    if(!l || !l.slug) return;
-                    const key = String(l.slug).toLowerCase();
-                    map[key] = {
+                    if(!l) return;
+                    const slugKey = l.slug ? String(l.slug).toLowerCase() : null;
+                    const nameKey = l.name ? normalizeLabel(String(l.name)) : null;
+                    const entry = {
                         path: l.path || l.file || null,
                         name: l.name || l.label || l.title || l.slug
                     };
+                    if (slugKey) map[slugKey] = entry;
+                    if (nameKey) map[nameKey] = entry;
                 });
                 setLogosMap(map);
             }catch(e){ /* ignore */ }
@@ -75,8 +78,75 @@ export default function AfficheurClassiqueArrivees(){
         }
         fetchPerturbations();
         timer = setInterval(fetchPerturbations, 30000);
-        return ()=>{ aborted = true; if(timer) clearInterval(timer); };
+        // Réagir aux mises à jour globales des perturbations (émises par usePerturbations)
+        const onPerturbationsUpdated = () => { try{ fetchPerturbations(); }catch(_){/* ignore */} };
+        try{ window.addEventListener('perturbations:updated', onPerturbationsUpdated); }catch(_){/* ignore */}
+        return ()=>{ aborted = true; if(timer) clearInterval(timer); try{ window.removeEventListener('perturbations:updated', onPerturbationsUpdated); }catch(_){/* ignore */} };
     },[]);
+
+    // Fonction pour synchroniser les statuts avec les perturbations quotidiennes
+    const synchronizeStatusWithPerturbations = (arrival) => {
+        if (!perturbations || perturbations.length === 0) {
+            // Pas de perturbations, retourner le statut original
+            return {
+                status: arrival.status || 'A L\'HEURE',
+                delay: arrival.delay_minutes || 0,
+                cancelled: arrival.status === 'SUPPRIMÉ'
+            };
+        }
+
+        const trainNumber = arrival.number || arrival.train_number || arrival.code || arrival.name || arrival.id || '';
+        const timeRaw = arrival.horaire_afficheur || arrival.arrival_time || arrival.time || '';
+
+        // Chercher une perturbation correspondante
+        const matchingPerturbation = perturbations.find(perturb => {
+            // Matcher par numéro de train
+            const perturbTrainNumber = perturb.train_number || perturb.number || perturb.code || '';
+            if (perturbTrainNumber && trainNumber && perturbTrainNumber.toString() === trainNumber.toString()) {
+                return true;
+            }
+
+            // Matcher par gare et heure si disponible
+            const perturbStation = perturb.station || perturb.gare || '';
+            const perturbTime = perturb.time || perturb.arrival_time || perturb.horaire || '';
+            if (perturbStation && perturbTime && timeRaw) {
+                const normalizedStation = normalizeLabel(perturbStation);
+                const normalizedGare = normalizeLabel(gare);
+                if (normalizedStation === normalizedGare || normalizedStation.includes(normalizedGare) || normalizedGare.includes(normalizedStation)) {
+                    // Comparer les heures (format approximatif)
+                    const perturbTimeFormatted = perturbTime.replace(/[^\d:]/g, '').slice(0, 5);
+                    const arrivalTimeFormatted = timeRaw.replace(/[^\d:h]/g, '').replace('h', ':').slice(0, 5);
+                    if (perturbTimeFormatted === arrivalTimeFormatted) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        });
+
+        if (matchingPerturbation) {
+            // Appliquer les données de la perturbation
+            const perturbStatus = matchingPerturbation.status || matchingPerturbation.state || '';
+            const perturbDelay = matchingPerturbation.delay_minutes || matchingPerturbation.delay || 0;
+            const perturbCancelled = perturbStatus.toLowerCase().includes('supprimé') ||
+                                   perturbStatus.toLowerCase().includes('cancelled') ||
+                                   matchingPerturbation.cancelled === true;
+
+            return {
+                status: perturbCancelled ? 'SUPPRIMÉ' : (perturbDelay > 0 ? 'RETARDÉ' : perturbStatus || 'A L\'HEURE'),
+                delay: perturbDelay,
+                cancelled: perturbCancelled
+            };
+        }
+
+        // Aucune perturbation trouvée, retourner le statut original
+        return {
+            status: arrival.status || 'A L\'HEURE',
+            delay: arrival.delay_minutes || 0,
+            cancelled: arrival.status === 'SUPPRIMÉ'
+        };
+    };
 
     // charge des départs
     useEffect(()=>{
@@ -101,16 +171,16 @@ export default function AfficheurClassiqueArrivees(){
     },[gare]);
 
     // utilitaires (normalisation / extraction de label / extraction d'heure)
-    const normalizeLabel = (s)=>{
-        if(!s) return '';
-        try{
-            let t = String(s).normalize('NFD').replace(/\p{Diacritic}/gu,'');
-            t = t.replace(/[^\p{L}\p{N}]+/gu,' ').trim().toLowerCase();
-            return t.replace(/\s+/g,' ');
-        }catch(_){
-            let t = String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-            t = t.replace(/[^A-Za-z0-9\u00C0-\u017F]+/g,' ').trim().toLowerCase();
-            return t.replace(/\s+/g,' ');
+    const normalizeLabel = (s) => {
+        if (!s) return '';
+        try {
+            let t = String(s).normalize('NFD').replace(/\p{Diacritic}/gu, '');
+            t = t.replace(/[^\p{L}\p{N}]+/gu, ' ').trim().toLowerCase();
+            return t.replace(/\s+/g, ' ');
+        } catch (_) {
+            let t = String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            t = t.replace(/[^A-Za-z0-9\u00C0-\u017F]+/g, ' ').trim().toLowerCase();
+            return t.replace(/\s+/g, ' ');
         }
     };
 
@@ -251,6 +321,24 @@ export default function AfficheurClassiqueArrivees(){
             return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hh, mm, 0, 0);
         }
         return null;
+    };
+
+    // Formatage d'affichage des heures : convertir '08:30' -> '08h30', gérer variantes ISO ou '08h30'.
+    const formatHourForBoard = (s) => {
+        if (!s && s !== 0) return '';
+        const str = String(s);
+        // Chercher HH:MM ou H:MM ou HHhMM
+        const m = str.match(/(\d{1,2})[:h](\d{2})/);
+        if (m) {
+            const hh = String(m[1]).padStart(2, '0');
+            const mm = m[2];
+            return `${hh}h${mm}`;
+        }
+        // ISO datetime (YYYY-MM-DDTHH:MM...)
+        const iso = str.match(/\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+        if (iso) return `${iso[1]}h${iso[2]}`;
+        // fallback : remplacer tous les ':' par 'h'
+        return str.replace(/:/g, 'h');
     };
 
     const runsOnDate = (item, date) => {
@@ -593,14 +681,21 @@ export default function AfficheurClassiqueArrivees(){
     }, [departures]);
 
     // utilitaires de logo (fallback local si non fournis globalement)
-    const getLogoFor = (type)=>{
-        if(!type) return '/img/brand/sncf-logo.png';
-        if(logosMap && logosMap[type] && logosMap[type].path) return logosMap[type].path;
-        return `/img/type/logo-${type}.svg`;
+    const getLogoFor = (type) => {
+        if (!type) return '/img/brand/sncf-logo.png';
+        const key = normalizeLabel(String(type));
+        if (logosMap && logosMap[key] && logosMap[key].path) return logosMap[key].path;
+        const slug = String(type).toLowerCase();
+        if (logosMap && logosMap[slug] && logosMap[slug].path) return logosMap[slug].path;
+        return `/img/type/logo-${slug}.svg`;
     };
-    const getTypeName = (type)=>{
-        if(!type) return 'SNCF';
-        if(logosMap && logosMap[type] && logosMap[type].name) return String(logosMap[type].name).toUpperCase();
+
+    const getTypeName = (type) => {
+        if (!type) return 'SNCF';
+        const key = normalizeLabel(String(type));
+        if (logosMap && logosMap[key] && logosMap[key].name) return String(logosMap[key].name).toUpperCase();
+        const slug = String(type).toLowerCase();
+        if (logosMap && logosMap[slug] && logosMap[slug].name) return String(logosMap[slug].name).toUpperCase();
         return String(type).toUpperCase();
     };
 
@@ -641,8 +736,12 @@ export default function AfficheurClassiqueArrivees(){
                         {departures.map((d,i)=>{
                             const tinfo = getTimeForItem(d, referenceNow);
                             const timeRaw = tinfo.timeRaw;
+                            const timeDisplay = formatHourForBoard(timeRaw);
                             const stops = d.stops || [];
                              const lastStop = (stops && stops.length) ? stops[stops.length-1] : null;
+                            // définir le chemin du logo pour cet item (utilisé dans le JSX)
+                            const logoPath = getLogoFor((d.type||'').toString().toLowerCase());
+
                             // Calculer la gare d'origine : plusieurs champs API possibles
                             let originName = '';
                             if(d){
@@ -669,57 +768,21 @@ export default function AfficheurClassiqueArrivees(){
                             }
                             destinationName = String(destinationName||'').trim();
                             const served = (stops || []).map(s => getStopLabel(s)).filter(Boolean);
-                            // valeurs initiales issues de l'API de départ
-                            let cancelled = !!d.cancelled;
-                            let delay = (typeof d.delay_min === 'number' && d.delay_min>0) ? d.delay_min : (d.delay || 0);
 
-                            // fusionner avec les perturbations chargées depuis /api/perturbations/daily
-                            if(Array.isArray(perturbations) && perturbations.length){
-                                const match = perturbations.find(p=>{
-                                    if(!p) return false;
-                                    // id exact
-                                    if(p.id && d.id && String(p.id) === String(d.id)) return true;
-                                    // numéro ou code de train
-                                    const pnum = p.train_number || p.number || p.code || p.train || p.id;
-                                    if(pnum){
-                                        if(String(pnum) === String(d.number) || String(pnum) === String(d.train_number) || String(pnum) === String(d.code)) return true;
-                                        if(String(pnum) === String(d.number) || String(pnum) === String(d.train_number) || String(pnum) === String(d.code)) return true;
-                                        // heure + destination approximative
-                                        const ptime = p.time || p.departure_time || p.scheduled_departure_time || p.horaire_afficheur;
-                                        if(ptime && timeRaw){
-                                            const normTime = s=>String(s||'').replace(/[^0-9]/g,'');
-                                            if(normTime(ptime) === normTime(timeRaw)){
-                                                const pdest = p.destination || p.destination_name || p.arrival_station || p.stop || p.dest || p.to;
-                                                if(!pdest) return true; // heure suffit
-                                                const n = s=>String(s||'').toLowerCase().replace(/\s*\(.*?\)\s*/g,'').trim();
-                                                if(n(pdest) && n(destinationName) && (n(pdest).includes(n(destinationName)) || n(destinationName).includes(n(pdest)))) return true;
-                                            }
-                                        }
-                                    }
-                                    return false;
-                                });
-                                if(match){
-                                    const m = match;
-                                    const mStatus = String(m.status || m.type || '').toLowerCase();
-                                    if(m.cancelled === true || mStatus.includes('supprim') || mStatus.includes('cancel')){ cancelled = true; delay = 0; }
-                                    else {
-                                        const pd = m.delay_min ?? m.delay ?? m.delay_minutes ?? m.delayMin ?? null;
-                                        const pdNum = pd != null ? Number(pd) : NaN;
-                                        if(!Number.isNaN(pdNum) && pdNum > 0) delay = pdNum;
-                                    }
-                                }
-                            }
+                            // Utiliser directement le statut et le retard renvoyés par l'API
+                            const status = d.status || 'A L\'HEURE';
+                            const cancelled = status === 'SUPPRIMÉ';
+                            const delay = d.delay_minutes || 0;
+
                             const typeSlug = (d.type||'').toString().toLowerCase();
-                            const bigLogo = getLogoFor(typeSlug);
                             const typeName = getTypeName(typeSlug);
 
                             // Modification de la logique d'affichage des quais pour les arrivées
-                            // Prefer platform provided directly by the API (server attaches admin assignment as `platform` when present).
                             const apiAssigned = Object.prototype.hasOwnProperty.call(d, 'platform') ? d.platform : undefined;
                             let platformToShow = null;
                             if (apiAssigned !== undefined) {
                               if (String(apiAssigned).trim() !== '') platformToShow = apiAssigned;
-                              else platformToShow = '—'; // Afficher "—" au lieu de masquer la box
+                              else platformToShow = '—';
                             } else {
                               const adminPlatform = platformForStation(d, gare);
                               if (adminPlatform !== null && adminPlatform !== undefined) {
@@ -727,14 +790,17 @@ export default function AfficheurClassiqueArrivees(){
                                 else platformToShow = '—';
                               } else {
                                 const fallbackPlatform = d.voie || d.platform || d.platform_code || d.track;
-                                platformToShow = fallbackPlatform || '—'; // Toujours afficher une box, même vide avec "—"
+                                platformToShow = fallbackPlatform || '—';
                               }
                             }
 
                                     // status text inline rendering used in JSX; no separate variable to avoid unused warning
                                     return (
                                       <div className={`row ${i%2?'alt':''}`} key={d.id||i}>
-                                        <div className="cell logo"><Image src={getLogoFor((d.type||'').toString().toLowerCase())} alt={d.type||'type'} width={135} height={54} /></div>
+                                        <div className="cell logo">
+                                          <Image src={logoPath} alt={d.type||'type'} width={135} height={54} />
+                                          {debug && <div className="logo-path" style={{marginTop:6,fontSize:12,opacity:.85,wordBreak:'break-all'}}>{logoPath}</div>}
+                                        </div>
                                         <div className="cell status">
                                             <div className="meta-top">
                                                 {showStatus ? (
@@ -759,20 +825,27 @@ export default function AfficheurClassiqueArrivees(){
                                             </div>
                                         </div>
                                         {/* masquer l'heure uniquement lorsque le statut 'supprimé' est affiché (showStatus && cancelled) */}
-                                        <div className="cell time"><span>{(!showStatus || !cancelled) ? timeRaw : ''}</span></div>
+                                        <div className="cell time"><span>{(!showStatus || !cancelled) ? timeDisplay : ''}</span></div>
                                         <div className="cell destination">
                                             <div className="dest-main">{originName || '—'}</div>
                                             {served.length > 0 && i < 2 && (
                                               <div className="served-list" title={served.join(' • ')}>
                                                 <span className="served-title">Via :</span>
                                                 <div className="served-mask">
-                                                  <Marquee className="served-inline">{served.join(' • ')}</Marquee>
+                                                  <Marquee className="served-inline">
+                                                    {served.map((s2, idx2) => (
+                                                      <span key={idx2} className="served-item">
+                                                        {s2}
+                                                        {idx2 < served.length - 1 && <span className="served-sep"> • </span>}
+                                                      </span>
+                                                    ))}
+                                                  </Marquee>
                                                 </div>
                                               </div>
                                             )}
                                         </div>
                                         {/* Modifier le rendu pour toujours afficher la box de quai */}
-                                        <div className="cell voie"><div className="voie-box">{platformToShow}</div></div>
+                                        <div className="cell voie">{!cancelled ? <div className="voie-box">{platformToShow}</div> : null}</div>
                                     </div>
                             );
                         })}
@@ -816,8 +889,8 @@ export default function AfficheurClassiqueArrivees(){
         .row.loading,.row.error,.row.empty{font-size:48px;font-weight:600;justify-content:center;grid-template-columns:1fr}
 
         /* Cells */
-        .cell.logo{display:flex;align-items:center;justify-content:center;padding-left:10px}
-        .cell.status{display:flex;flex-direction:column;align-items:center;justify-content:center;padding-left:0;padding-right:6px;text-align:center}
+        .cell.logo{display:flex;align-items:center;justify-content:center;padding-left:40px}
+        .cell.status{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding-left:12px;padding-right:6px;text-align:left}
         .meta-top{height:48px;display:flex;align-items:center;gap:10px}
 
         .status-text{font-size:26px;font-weight:700;color:#fff;text-align:center}
@@ -827,30 +900,40 @@ export default function AfficheurClassiqueArrivees(){
 
         /* Nouvelle présentation du statut : pile pour Retardé (+XX min) ou ligne unique Supprimé */
         .status-stack{display:flex;flex-direction:column;align-items:center;gap:2px}
-        .status-stack .status-primary{font-size:26px;font-weight:800;color:#ffe300}
+        .status-stack .status-primary{font-size:26px;font-weight:900;color:#ffe300}
         .status-stack.delayed .status-primary{color:#ffe300}
-        .status-stack.delayed .status-secondary{font-size:20px;font-weight:700;color:#ffe300}
-        .status-stack.cancelled .status-primary{font-size:28px;font-weight:900;color:#ff6b6b}
+        .status-stack.delayed .status-secondary{font-size:20px;font-weight:900;color:#ffe300}
+        .status-stack.cancelled .status-primary{font-size:28px;font-weight:900;color:#ffe300}
         /* Garantir que l'heure est masquée quand un sillon est supprimé et que le statut est affiché */
         .cell.time span{display:inline-block}
 
-        .type-name{font-size:22px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;text-align:center}
-        .type-block{display:flex;flex-direction:column;align-items:center;gap:6px}
-        /* Le numéro de train doit être aligné à gauche (horizontalement) mais rester centré verticalement
-           dans la colonne ; on force la largeur à 100% et on aligne le texte à gauche. */
-        .train-number{font-size:22px;font-weight:700;color:#fff;align-self:flex-start;width:100%;text-align:left;padding-left:8px}
+        /* Type / train block: left-aligned inside the status column */
+        .type-name{font-size:22px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;text-align:left}
+        .type-block{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+        .train-number{font-size:22px;font-weight:900;color:#fff;text-align:left;padding-left:0}
+
+        /* Responsive adjustments for left-aligned type block */
+        @media (max-width:1600px){
+          .cell.status{padding-left:8px}
+          .type-name,.train-number{font-size:18px}
+        }
 
         .cell.time span{font-size:54px;font-weight:900;color:#ffe300;letter-spacing:0.01em;font-variant-numeric:tabular-nums;}
-        .cell.destination{padding-left:18px;padding-right:110px;display:flex;flex-direction:column;justify-content:center;min-width:0}
-        .dest-main{font-size:54px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;line-height:1.08;}
+        /* police Achemine pour les heures comme le reste du board */
+        .cell.time span{ font-family: 'Achemine', sans-serif }
+
+        .cell.destination{padding-left:80px;padding-right:110px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+        .dest-main{font-size:70px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;line-height:1.08;}
 
         /* Served list: compact chips, responsive, +N expansion */
-        .served-list{font-size:20px;color:#c8d6e6;margin-top:6px;display:flex;align-items:center;gap:12px}
+        .served-list{font-size:60px;color:#c8d6e6;margin-top:6px;display:flex;align-items:center;gap:12px}
         .served-title{font-weight:700;color:#ffffff;flex:0 0 auto;margin-right:12px;font-size:22px}
         .served-mask{flex:1 1 auto;overflow:hidden;max-width:100%;display:block}
         /* Afficher toutes les gares sur UNE SEULE LIGNE sans changer la taille de la police */
         /* mêmes dimensions de police que la destination principale */
         .served-inline{display:inline-block;white-space:nowrap;color:#cfe7ff;font-weight:600;font-size:54px;padding-right:24px}
+        /* Séparateur entre gares: même couleur que l'heure */
+        .served-sep{ color: #ffe300; padding: 0 6px; display: inline-block }
 
         /* Quai : boîte carrée bordée blanche */
         .cell.voie{display:flex;justify-content:flex-end;align-items:center;padding-right:18px}

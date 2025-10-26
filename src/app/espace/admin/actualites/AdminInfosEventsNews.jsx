@@ -48,7 +48,7 @@ function InfosTraficManager(){
               <td><wcs-badge color="primary">{it.type}</wcs-badge></td>
               <td>{it.titre}</td>
               <td>{formatDate(it.created_at)}</td>
-              <td className="text-end" style={{whiteSpace:'nowrap'}}>
+              <td className="text-end nowrap">
                 <wcs-button mode="stroked" size="s" onClick={()=>openEdit(it)}>Éditer</wcs-button>{' '}
                 <wcs-button mode="clear" size="s" onClick={()=>del(it)}>Suppr.</wcs-button>
               </td>
@@ -108,7 +108,7 @@ function EvenementsManager(){
               <td>{it.id}</td><td>{it.titre}</td><td>{it.duree}</td>
               <td><wcs-button size="s" mode={it.highlight? 'plain':'stroked'} onClick={()=>toggleHighlight(it)}>{it.highlight? 'Oui':'Non'}</wcs-button></td>
               <td>{formatDate(it.created_at)}</td>
-              <td className="text-end" style={{whiteSpace:'nowrap'}}>
+              <td className="text-end nowrap">
                 <wcs-button mode="stroked" size="s" onClick={()=>openEdit(it)}>Éditer</wcs-button>{' '}
                 <wcs-button mode="clear" size="s" onClick={()=>del(it)}>Suppr.</wcs-button>
               </td>
@@ -160,9 +160,9 @@ function ActualitesManager(){
               <td>{it.id}</td>
               <td>{it.titre}</td>
               <td>{it.publication_date? formatDate(it.publication_date): <span className="text-muted">—</span>}</td>
-              <td>{it.image_path? <img src={it.image_path} alt="img" style={{height:32}}/>: <span className="text-muted">—</span>}</td>
+              <td>{it.image_path? <img src={it.image_path} alt="img" className="img-small"/>: <span className="text-muted">—</span>}</td>
               <td>{formatDate(it.created_at)}</td>
-              <td className="text-end" style={{whiteSpace:'nowrap'}}>
+              <td className="text-end nowrap">
                 <wcs-button mode="stroked" size="s" onClick={()=>openEdit(it)}>Éditer</wcs-button>{' '}
                 <wcs-button mode="clear" size="s" onClick={()=>del(it)}>Suppr.</wcs-button>
               </td>
@@ -219,7 +219,7 @@ function ArticlesManager(){
               <td className="small text-muted">{it.slug}</td>
               <td><wcs-button size="s" mode={it.homepage? 'plain':'stroked'} onClick={()=>toggleHomepage(it)}>{it.homepage? 'Oui':'Non'}</wcs-button></td>
               <td>{formatDate(it.created_at)}</td>
-              <td className="text-end" style={{whiteSpace:'nowrap'}}>
+              <td className="text-end nowrap">
                 <wcs-button mode="stroked" size="s" onClick={()=>openEdit(it)}>Éditer</wcs-button>{' '}
                 <wcs-button mode="clear" size="s" onClick={()=>del(it)}>Suppr.</wcs-button>
               </td>
@@ -269,7 +269,7 @@ function RichTextEditor({ name, required, initialValue='' }){
       <wcs-button size="s" mode="stroked" type="button" onClick={()=>{ const url=prompt('URL du lien:'); if(url) exec('createLink', url); }}>Lien</wcs-button>
       <wcs-button size="s" mode="stroked" type="button" onClick={()=>{ if(ref.current){ ref.current.innerHTML=''; sync(); } }}>Effacer</wcs-button>
     </div>
-    <div ref={ref} className="form-control" style={{minHeight:'6rem', overflowY:'auto'}} contentEditable data-editor-for={name} onInput={sync} onBlur={sync} onPaste={onPaste}></div>
+    <div ref={ref} className="form-control rich-editor" contentEditable data-editor-for={name} onInput={sync} onBlur={sync} onPaste={onPaste}></div>
     <input ref={inputRef} type="hidden" name={name} required={required} />
   </div>;
 }

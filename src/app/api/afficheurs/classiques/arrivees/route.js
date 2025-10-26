@@ -77,8 +77,14 @@ export async function GET(req){
 
     const typeLogoMap = await getTrainTypesFromRegionData();
 
-    const now = new Date();
-    const nowHM = now.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit', hour12:false});
+    // Supporter un paramètre date (ISO yyyy-mm-dd) comme dans AFL
+    const dateParam = searchParams.get('date') || null;
+    const refDate = dateParam ? new Date(dateParam + 'T00:00:00') : new Date();
+    // (la date de référence pour le filtrage est prise depuis `refDate` ou le paramètre `date`)
+    const todayISO = refDate.toISOString().slice(0, 10);
+
+    // Note: la variable `now` n'est pas utilisée ici
+
     const [st] = await query('SELECT id, name FROM stations WHERE name=? LIMIT 1',[gareName]);
     if(!st) return NextResponse.json({ error:'Gare inconnue' }, { status:404 });
 
@@ -96,6 +102,26 @@ export async function GET(req){
       ORDER BY s.arrival_time ASC`, [st.id, `%${likeParam}%`]);
 
     const scheduleIds = (rows || []).map(r => r.id).filter(Boolean);
+
+    // Récupérer les perturbations quotidiennes pour aujourd'hui
+    const perturbationsMap = {};
+    if(scheduleIds.length){
+      try{
+        const placeholders = scheduleIds.map(()=>'?').join(',');
+        const perturbRows = await scheduleQuery(
+          `SELECT * FROM schedule_daily_variants WHERE date = ? AND schedule_id IN (${placeholders})`,
+          [todayISO, ...scheduleIds]
+        );
+        if(Array.isArray(perturbRows)){
+          perturbRows.forEach(p => {
+            perturbationsMap[p.schedule_id] = p;
+          });
+        }
+      }catch(err){
+        console.error('Erreur récupération perturbations arrivées:', err);
+      }
+    }
+
     const assignedMap = {};
     if(scheduleIds.length){
       try{
@@ -156,6 +182,21 @@ export async function GET(req){
       const trainType = r.train_type || 'TER';
       const logoPath = typeLogoMap[trainType.toUpperCase()] || '/img/type/ter.svg';
 
+      // Appliquer les perturbations quotidiennes
+      let status = 'A L\'HEURE';
+      let delayMinutes = null;
+      const perturbation = perturbationsMap[r.id];
+
+      if(perturbation){
+        const pType = String(perturbation.type || '').toLowerCase();
+        if(pType === 'suppression'){
+          status = 'SUPPRIMÉ';
+        } else if(pType === 'retard' && perturbation.delay_minutes){
+          status = 'RETARDÉ';
+          delayMinutes = perturbation.delay_minutes;
+        }
+      }
+
       return {
         id: r.id,
         number: r.train_number,
@@ -167,7 +208,9 @@ export async function GET(req){
         horaire_afficheur,
         voie: platformToShow || '',
         platform: platformToShow,
-        status: 'A L\'HEURE'
+        status: status,
+        delay_minutes: delayMinutes,
+        perturbation: perturbation || null
       };
     }).filter(r => r && r.horaire_afficheur).slice(0,10);
     return NextResponse.json({ gare: gareName, arrivals: list });
