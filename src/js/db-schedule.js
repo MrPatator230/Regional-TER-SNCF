@@ -9,7 +9,7 @@ const config = {
   database: process.env.SCHEDULE_DB_DATABASE || 'horaires',
   port: Number(process.env.SCHEDULE_DB_PORT || process.env.DB_PORT || 8889),
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 1000,
   queueLimit: 0,
 };
 

@@ -12,6 +12,8 @@ export default function AfficheurClassiqueDeparts(){
     const [serverNow, setServerNow] = useState(null);
     const [logosMap, setLogosMap] = useState(null);
     const [showStatus, setShowStatus] = useState(true);
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [isScrolling, setIsScrolling] = useState(false);
 
     const search = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const gare = search ? (search.get('gare') || '').trim() : '';
@@ -161,8 +163,8 @@ export default function AfficheurClassiqueDeparts(){
             const perturbStatus = matchingPerturbation.status || matchingPerturbation.state || '';
             const perturbDelay = matchingPerturbation.delay_minutes || matchingPerturbation.delay || 0;
             const perturbCancelled = perturbStatus.toLowerCase().includes('supprimé') ||
-                                   perturbStatus.toLowerCase().includes('cancelled') ||
-                                   matchingPerturbation.cancelled === true;
+                perturbStatus.toLowerCase().includes('cancelled') ||
+                matchingPerturbation.cancelled === true;
 
             return {
                 status: perturbCancelled ? 'SUPPRIMÉ' : (perturbDelay > 0 ? 'RETARDÉ' : perturbStatus || 'A L\'HEURE'),
@@ -307,6 +309,63 @@ export default function AfficheurClassiqueDeparts(){
         return (aTimeRaw || '').localeCompare(bTimeRaw || '');
     });
 
+    // Défilement automatique continu si plus de 8 départs
+    useEffect(() => {
+        const departuresCount = departures.length;
+
+        if (departuresCount <= 8 || loading || error) {
+            setIsScrolling(false);
+            setScrollOffset(0);
+            return;
+        }
+
+        // Attendre 20 secondes avant de commencer le défilement
+        const startTimeout = setTimeout(() => {
+            setIsScrolling(true);
+
+            // Calculer la hauteur totale de tous les éléments
+            const getRowHeight = (index) => index < 2 ? 220 : 100;
+            let totalContentHeight = 0;
+            for (let i = 0; i < departuresCount; i++) {
+                totalContentHeight += getRowHeight(i);
+            }
+
+            // Pas besoin de variables d'espacement pour le défilement seamless
+
+            let animationId;
+            let currentOffset = 0;
+
+            const animate = () => {
+                // Vitesse de défilement (pixels par frame à 60fps)
+                currentOffset += 1;
+
+                // Créer un défilement continu seamless
+                // Quand on atteint la fin du contenu original, on revient au début
+                // pour que la duplication prenne le relais de façon invisible
+                if (currentOffset >= totalContentHeight) {
+                    currentOffset = 0;
+                }
+
+                setScrollOffset(currentOffset);
+                animationId = requestAnimationFrame(animate);
+            };
+
+            animationId = requestAnimationFrame(animate);
+
+            return () => {
+                cancelAnimationFrame(animationId);
+                setIsScrolling(false);
+                setScrollOffset(0);
+            };
+        }, 20000); // Attendre 20 secondes au démarrage
+
+        return () => {
+            clearTimeout(startTimeout);
+            setIsScrolling(false);
+            setScrollOffset(0);
+        };
+    }, [departures.length, loading, error]);
+
     // debug flag
     const debug = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1';
 
@@ -336,11 +395,12 @@ export default function AfficheurClassiqueDeparts(){
                 <div className="watermark">départs</div>
 
                 <div className="rows">
-                    <div className="rows-inner">
+                    <div className="rows-inner" style={{ transform: `translateY(-${scrollOffset}px)`, transition: 'none' }}>
                         {loading && <div className="row loading">Chargement…</div>}
                         {error && !loading && <div className="row error">{error}</div>}
                         {!loading && !error && !departures.length && <div className="row empty">Aucun train prévu</div>}
 
+                        {/* Première série d'horaires */}
                         {departures.map((d, i) => {
                             const tinfo = getTimeForDeparture(d, referenceNow);
                             const timeRaw = tinfo.timeRaw;
@@ -352,7 +412,7 @@ export default function AfficheurClassiqueDeparts(){
                             // Calculer la gare d'origine/destination selon le type d'affichage
                             let displayName = '';
                             if (d) {
-                                displayName = getStopLabel(d.origin_station) || getStopLabel(d.departure_station) || getStopLabel(d.start_station) || getStopLabel(d.from) || getStopLabel(d.origin) || '';
+                                displayName = getStopLabel(d.arrival_station) || getStopLabel(d.arrival_station) || getStopLabel(d.start_station) || getStopLabel(d.from) || getStopLabel(d.origin) || '';
                                 if (!displayName && stops && stops.length) {
                                     displayName = getStopLabel(firstStop);
                                 }
@@ -448,6 +508,112 @@ export default function AfficheurClassiqueDeparts(){
                                 </div>
                             );
                         })}
+
+                        {/* Espacement de la hauteur de l'afficheur entre les deux blocs */}
+                        {departures.length > 8 && (
+                            <div style={{ height: '1040px' }}></div>
+                        )}
+
+                        {/* Duplication des horaires pour l'effet de boucle continue - seulement si plus de 8 éléments */}
+                        {departures.length > 8 && departures.map((d, i) => {
+                            // ...existing code...
+                            const tinfo = getTimeForDeparture(d, referenceNow);
+                            const timeRaw = tinfo.timeRaw;
+                            const timeDisplay = formatHourForBoard(timeRaw);
+                            const stops = d.stops || [];
+                            const firstStop = (stops && stops.length) ? stops[0] : null;
+                            const lastStop = (stops && stops.length) ? stops[stops.length - 1] : null;
+
+                            let displayName = '';
+                            if (d) {
+                                displayName = getStopLabel(d.arrival_station) || getStopLabel(d.arrival_station) || getStopLabel(d.start_station) || getStopLabel(d.from) || getStopLabel(d.origin) || '';
+                                if (!displayName && stops && stops.length) {
+                                    displayName = getStopLabel(firstStop);
+                                }
+                            } else if (firstStop) {
+                                displayName = getStopLabel(firstStop);
+                            }
+                            displayName = String(displayName || '').trim();
+
+                            const trainNumber = d.number || d.train_number || d.code || d.name || d.id || '';
+                            const served = (stops || []).map(s => getStopLabel(s)).filter(Boolean);
+
+                            const { status, delay, cancelled } = synchronizeStatusWithPerturbations(d);
+
+                            const typeSlug = (d.type || '').toString().toLowerCase();
+                            const typeName = getTypeName(typeSlug);
+
+                            const apiAssigned = Object.prototype.hasOwnProperty.call(d, 'platform') ? d.platform : undefined;
+                            let platformToShow = null;
+                            if (apiAssigned !== undefined) {
+                                if (String(apiAssigned).trim() !== '') platformToShow = apiAssigned;
+                                else platformToShow = '—';
+                            } else {
+                                const adminPlatform = platformForStation(d, gare);
+                                if (adminPlatform !== null && adminPlatform !== undefined) {
+                                    if (String(adminPlatform).trim() !== '') platformToShow = adminPlatform;
+                                    else platformToShow = '—';
+                                } else {
+                                    const fallbackPlatform = d.voie || d.platform || d.platform_code || d.track;
+                                    platformToShow = fallbackPlatform || '—';
+                                }
+                            }
+
+                            const typeIndicator = d._displayType === 'arrival' ? 'ARR' : '';
+                            const logoPath = getLogoFor((d.type || '').toString().toLowerCase());
+
+                            return (
+                                <div className={`row ${i % 2 ? 'alt' : ''}`} key={`duplicate-${d._displayType}-${d.id || i}`}>
+                                    <div className="cell logo">
+                                        <Image src={logoPath} alt={d.type || 'type'} width={135} height={54} />
+                                        {debug && <div className="logo-path" style={{marginTop:6,fontSize:12,opacity:.85,wordBreak:'break-all'}}>{logoPath}</div>}
+                                    </div>
+                                    <div className="cell status">
+                                        <div className="meta-top">
+                                            {showStatus ? (
+                                                cancelled ? (
+                                                    <div className="status-stack cancelled">
+                                                        <span className="status-primary">supprimé</span>
+                                                    </div>
+                                                ) : (delay ? (
+                                                    <div className="status-stack delayed">
+                                                        <span className="status-primary">retardé</span>
+                                                        <span className="status-secondary">+{delay} min</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className={`status-text ontime`}>à l'heure</span>
+                                                ))
+                                            ) : (
+                                                <div className="type-block">
+                                                    <div className="type-name">{typeName}</div>
+                                                    <div className="train-number">{typeIndicator} {trainNumber}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="cell time"><span>{(!showStatus || !cancelled) ? timeDisplay : ''}</span></div>
+                                    <div className="cell destination">
+                                        <div className="dest-main">{displayName || '—'}</div>
+                                        {served.length > 0 && i < 2 && (
+                                            <div className="served-list" title={served.join(' • ')}>
+                                                <span className="served-title">Via :</span>
+                                                <div className="served-mask">
+                                                    <Marquee className="served-inline">
+                                                        {served.map((s2, idx2) => (
+                                                            <span key={idx2} className="served-item">
+                                                                {s2}
+                                                                {idx2 < served.length - 1 && <span className="served-sep"> • </span>}
+                                                            </span>
+                                                        ))}
+                                                    </Marquee>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="cell voie">{!cancelled ? <div className="voie-box">{platformToShow}</div> : null}</div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -488,7 +654,7 @@ export default function AfficheurClassiqueDeparts(){
                 .row.loading,.row.error,.row.empty{font-size:48px;font-weight:600;justify-content:center;grid-template-columns:1fr}
 
                 /* Cells */
-                .cell.logo{display:flex;align-items:center;justify-content:center;padding-left:0px;margin-left: 20}
+                .cell.logo{display:flex;align-items:center;justify-content:center;padding-left:10px;margin-left: 30px}
                 .cell.status{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding-left:40px;padding-right:30px;text-align:left}
                 .meta-top{height:48px;display:flex;align-items:center;gap:10px}
 
@@ -507,16 +673,16 @@ export default function AfficheurClassiqueDeparts(){
                 .cell.time span{display:inline-block}
 
                 /* Type / train block: left-aligned inside the status column */
-                .type-name{font-size:22px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;text-align:left}
-                .type-block{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
-                .train-number{font-size:22px;font-weight:700;color:#fff;text-align:left;padding-left:0}
+                .type-name{font-size:30px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;text-align:left}
+                .type-block{display:flex;flex-direction:column;align-items:flex-start;gap:-10px}
+                .train-number{font-size:30px;font-weight:700;color:#fff;text-align:left;padding-left:0}
 
-                .cell.time span{font-size:80px;font-weight:900;color:#ffe300;letter-spacing:0.01em;font-variant-numeric:tabular-nums;}
+                .cell.time span{font-size:80px;font-weight:600;color:#FAC600;letter-spacing:0.01em;font-variant-numeric:tabular-nums;margin-left: 20px}
                 /* S'assurer que la police de l'heure est Achemine comme le reste */
                 .cell.time span{ font-family: 'Achemine', sans-serif }
 
-                .cell.destination{padding-left:30px;padding-right:110px;display:flex;flex-direction:column;justify-content:center;min-width:0}
-                .dest-main{font-size:120px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;line-height:1.08;}
+                .cell.destination{padding-left:30px;padding-right:100px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+                .dest-main{font-size:50px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;line-height:1.08;}
 
                 /* Served list: compact chips, responsive, +N expansion */
                 .served-list{font-size:60px;color:#c8d6e6;margin-top:6px;display:flex;align-items:center;gap:12px}
@@ -529,15 +695,15 @@ export default function AfficheurClassiqueDeparts(){
                 .served-sep{ color: #ffe300; padding: 0 6px; display: inline-block }
 
                 /* Colonne destination : élément flexible prenant l'espace restant */
-                .cell.destination{padding-left:20px;padding-right:20px;display:flex;flex-direction:column;justify-content:center;min-width:0}
-                .dest-main{font-size:60px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;line-height:1.02;}
+                .cell.destination{padding-left:20px;padding-right:20px;display:flex;flex-direction:column;min-width:0}
+                .dest-main{font-size:80px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;}
 
                 /* Quai : boîte carrée bordée blanche */
                 .cell.voie{display:flex;justify-content:center;align-items:center;padding-right:12px}
                 .voie-box{
                   border:4px solid #fff;
                   border-radius:12px;
-                  font-size:56px;
+                  font-size:70px;
                   font-weight:800;
                   width:120px;
                   height:120px;
@@ -552,7 +718,7 @@ export default function AfficheurClassiqueDeparts(){
                   box-shadow: inset 0 -6px 0 rgba(0,0,0,0.04);
                 }
                 /* Adapter la taille de la boîte quai pour les lignes à partir de la 3ème (min-height:100px) */
-                .rows .row:nth-child(n+3) .voie-box{ width:80px; height:80px; font-size:40px; border-width:3px }
+                .rows .row:nth-child(n+3) .voie-box{ width:80px; height:80px; font-size:60px; border-width:3px }
 
                 
                 /* Footer */

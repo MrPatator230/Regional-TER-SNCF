@@ -12,6 +12,8 @@ export default function AfficheurClassiqueArrivees(){
     const [serverNow,setServerNow]=useState(null);
     const [logosMap,setLogosMap]=useState(null);
     const [showStatus,setShowStatus]=useState(true);
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [isScrolling, setIsScrolling] = useState(false);
 
     const search = typeof window!=='undefined'? new URLSearchParams(window.location.search): null;
     const gare = search? (search.get('gare')||'').trim(): '';
@@ -588,6 +590,59 @@ export default function AfficheurClassiqueArrivees(){
         departures = departuresForDate(tomorrow, false);
     }
 
+    // Défilement automatique si plus de 8 arrivées
+    useEffect(() => {
+        const arrivalsCount = departures.length;
+
+        if (arrivalsCount <= 8 || loading || error) {
+            setIsScrolling(false);
+            setScrollOffset(0);
+            return;
+        }
+
+        // Attendre 20 secondes avant de commencer le défilement
+        const startTimeout = setTimeout(() => {
+            setIsScrolling(true);
+
+            // Calculer la hauteur d'une ligne (220px pour les 2 premières, 100px pour les suivantes)
+            const getRowHeight = (index) => index < 2 ? 220 : 100;
+            const maxVisibleRows = 8;
+            const totalRows = Math.min(arrivalsCount, 20); // Limiter à 20 horaires max
+
+            let currentIndex = 0;
+
+            const scroll = () => {
+                if (currentIndex >= totalRows - maxVisibleRows) {
+                    // Revenir au début après avoir affiché tous les horaires
+                    currentIndex = 0;
+                    setScrollOffset(0);
+                } else {
+                    currentIndex++;
+                    // Calculer l'offset de défilement
+                    let offset = 0;
+                    for (let i = 0; i < currentIndex; i++) {
+                        offset += getRowHeight(i);
+                    }
+                    setScrollOffset(offset);
+                }
+            };
+
+            const scrollInterval = setInterval(scroll, 3000); // Défiler toutes les 3 secondes
+
+            return () => {
+                clearInterval(scrollInterval);
+                setIsScrolling(false);
+                setScrollOffset(0);
+            };
+        }, 20000); // Attendre 20 secondes
+
+        return () => {
+            clearTimeout(startTimeout);
+            setIsScrolling(false);
+            setScrollOffset(0);
+        };
+    }, [departures.length, loading, error]);
+
     // debug flag
     const debug = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1';
 
@@ -728,7 +783,7 @@ export default function AfficheurClassiqueArrivees(){
                     </div>
                 )}
                 <div className="rows" ref={containerRef}>
-                    <div className="rows-inner" ref={contentRef} style={{transform:'translateY(0px)'}}>
+                    <div className="rows-inner" ref={contentRef} style={{transform: `translateY(-${scrollOffset}px)`, transition: isScrolling ? 'transform 0.8s ease-in-out' : 'none'}}>
                         {loading && <div className="row loading">Chargement…</div>}
                         {error && !loading && <div className="row error">{error}</div>}
                         {!loading && !error && !departures.length && <div className="row empty">Aucune arrivée prévue</div>}
